@@ -4,14 +4,32 @@ pub enum Token {
   EOF,
   Ident(String),
   Int(String),
-  Assign,
-  Plus,
   Comma,
   Semicolon,
   LParen,
   RParen,
   LBrace,
   RBrace,
+
+  // keywords
   Function,
   Let,
+  True,
+  False,
+  If,
+  Else,
+  Return,
+
+  // operators
+  Assign,
+  Plus,
+  Minus,
+  Bang,
+  Asterisk,
+  Slash,
+
+  Lt,
+  Gt,
+  Eq,
+  NotEq,
 }

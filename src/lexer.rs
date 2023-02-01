@@ -4,9 +4,14 @@ use phf::phf_map;
 static KEYWORDS: phf::Map<&'static str, Token> = phf_map! {
   "fn" => Token::Function,
   "let" => Token::Let,
+  "true" => Token::True,
+  "false" => Token::False,
+  "if" => Token::If,
+  "else" => Token::Else,
+  "return" => Token::Return,
 };
 
-struct Lexer {
+pub struct Lexer {
   input: Vec<char>,
   position: usize,
   read_position: usize,
@@ -14,7 +19,7 @@ struct Lexer {
 }
 
 impl Lexer {
-  fn new(input: String) -> Lexer {
+  pub fn new(input: String) -> Lexer {
     let mut lexer = Lexer {
       input: input.chars().collect(),
       position: 0,
@@ -25,10 +30,6 @@ impl Lexer {
     return lexer;
   }
 
-  fn from(input: &str) -> Lexer {
-    Lexer::new(String::from(input))
-  }
-
   fn read_char(&mut self) {
     if self.read_position >= self.input.len() {
       self.ch = '\0';
@@ -37,6 +38,14 @@ impl Lexer {
     }
     self.position = self.read_position;
     self.read_position += 1;
+  }
+
+  fn peek_char(&self) -> char {
+    if self.read_position >= self.input.len() {
+      return '\0';
+    } else {
+      return self.input[self.read_position];
+    }
   }
 
   fn read_identifier(&mut self) -> Token {
@@ -74,14 +83,34 @@ impl Iterator for Lexer {
     self.skip_whitespace();
     let token: Token;
     match self.ch {
-      '=' => token = Token::Assign,
       ';' => token = Token::Semicolon,
       '(' => token = Token::LParen,
       ')' => token = Token::RParen,
       ',' => token = Token::Comma,
       '+' => token = Token::Plus,
+      '-' => token = Token::Minus,
       '{' => token = Token::LBrace,
       '}' => token = Token::RBrace,
+      '/' => token = Token::Slash,
+      '*' => token = Token::Asterisk,
+      '<' => token = Token::Lt,
+      '>' => token = Token::Gt,
+      '!' => {
+        if self.peek_char() == '=' {
+          self.read_char();
+          token = Token::NotEq;
+        } else {
+          token = Token::Bang;
+        }
+      }
+      '=' => {
+        if self.peek_char() == '=' {
+          self.read_char();
+          token = Token::Eq;
+        } else {
+          token = Token::Assign;
+        }
+      }
       '\0' => token = Token::EOF,
       _ => {
         if is_letter(&self.ch) {
@@ -108,6 +137,12 @@ mod tests {
   use crate::lexer::*;
   use crate::token::*;
 
+  impl Lexer {
+    pub fn from(input: &str) -> Lexer {
+      Lexer::new(String::from(input))
+    }
+  }
+
   #[test]
   fn next_token() {
     let input = r#"
@@ -119,6 +154,17 @@ mod tests {
     };
 
     let result = add(five, ten);
+    !-/*5;
+    5 < 10 > 5;
+
+    if (5 < 10) {
+      return true;
+    } else {
+      return false;
+    }
+
+    10 == 10;
+    10 != 9;
     "#;
     let cases = vec![
       Token::Let,
@@ -156,6 +202,43 @@ mod tests {
       Token::Comma,
       Token::Ident("ten".to_string()),
       Token::RParen,
+      Token::Semicolon,
+      Token::Bang,
+      Token::Minus,
+      Token::Slash,
+      Token::Asterisk,
+      Token::Int("5".to_string()),
+      Token::Semicolon,
+      Token::Int("5".to_string()),
+      Token::Lt,
+      Token::Int("10".to_string()),
+      Token::Gt,
+      Token::Int("5".to_string()),
+      Token::Semicolon,
+      Token::If,
+      Token::LParen,
+      Token::Int("5".to_string()),
+      Token::Lt,
+      Token::Int("10".to_string()),
+      Token::RParen,
+      Token::LBrace,
+      Token::Return,
+      Token::True,
+      Token::Semicolon,
+      Token::RBrace,
+      Token::Else,
+      Token::LBrace,
+      Token::Return,
+      Token::False,
+      Token::Semicolon,
+      Token::RBrace,
+      Token::Int("10".to_string()),
+      Token::Eq,
+      Token::Int("10".to_string()),
+      Token::Semicolon,
+      Token::Int("10".to_string()),
+      Token::NotEq,
+      Token::Int("9".to_string()),
       Token::Semicolon,
       Token::EOF,
     ];
