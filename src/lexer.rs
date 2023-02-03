@@ -74,6 +74,15 @@ impl Lexer {
       self.read_char();
     }
   }
+
+  pub fn next_token(&mut self) -> Token {
+    self.next().unwrap()
+  }
+
+  #[cfg(test)]
+  pub fn from(input: &str) -> Lexer {
+    Lexer::new(String::from(input))
+  }
 }
 
 impl Iterator for Lexer {
@@ -137,10 +146,12 @@ mod tests {
   use crate::lexer::*;
   use crate::token::*;
 
-  impl Lexer {
-    pub fn from(input: &str) -> Lexer {
-      Lexer::new(String::from(input))
-    }
+  #[test]
+  fn token_variant() {
+    assert!(Token::EOF.same_variant(Token::EOF));
+    assert!(!Token::EOF.same_variant(Token::Comma));
+    assert!(Token::Int("33".to_string()).same_variant(Token::Int("44".to_string())));
+    assert!(!Token::Int("33".to_string()).same_variant(Token::Ident("33".to_string())));
   }
 
   #[test]
