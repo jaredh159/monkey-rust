@@ -38,11 +38,11 @@ pub enum Token {
 }
 
 impl Token {
-  pub fn same_variant(&self, other: Token) -> bool {
+  pub fn same_variant(&self, other: &Token) -> bool {
     match self {
-      Token::Int(_) => mem::discriminant(&other) == mem::discriminant(&self),
-      Token::Ident(_) => mem::discriminant(&other) == mem::discriminant(&self),
-      _ => *self == other,
+      Token::Int(_) => mem::discriminant(other) == mem::discriminant(&self),
+      Token::Ident(_) => mem::discriminant(other) == mem::discriminant(&self),
+      _ => self == other,
     }
   }
 
@@ -75,6 +75,38 @@ impl Token {
       Token::Gt => ">".to_string(),
       Token::Eq => "==".to_string(),
       Token::NotEq => "!=".to_string(),
+    }
+  }
+
+  pub fn type_string(&self) -> &'static str {
+    match self {
+      Token::Illegal => "Token::Illegal",
+      Token::EOF => "Token::EOF",
+      Token::Ident(_) => "Token::Ident",
+      Token::Int(_) => "Token::Int",
+      Token::Comma => "Token::Comma",
+      Token::Semicolon => "Token::Semicolon",
+      Token::LParen => "Token::LParen",
+      Token::RParen => "Token::RParen",
+      Token::LBrace => "Token::LBrace",
+      Token::RBrace => "Token::RBrace",
+      Token::Function => "Token::Function",
+      Token::Let => "Token::Let",
+      Token::True => "Token::True",
+      Token::False => "Token::False",
+      Token::If => "Token::If",
+      Token::Else => "Token::Else",
+      Token::Return => "Token::Return",
+      Token::Assign => "Token::Assign",
+      Token::Plus => "Token::Plus",
+      Token::Minus => "Token::Minus",
+      Token::Bang => "Token::Bang",
+      Token::Asterisk => "Token::Asterisk",
+      Token::Slash => "Token::Slash",
+      Token::Lt => "Token::Lt",
+      Token::Gt => "Token::Gt",
+      Token::Eq => "Token::Eq",
+      Token::NotEq => "Token::NotEq",
     }
   }
 }

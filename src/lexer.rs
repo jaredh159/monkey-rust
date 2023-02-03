@@ -148,10 +148,10 @@ mod tests {
 
   #[test]
   fn token_variant() {
-    assert!(Token::EOF.same_variant(Token::EOF));
-    assert!(!Token::EOF.same_variant(Token::Comma));
-    assert!(Token::Int("33".to_string()).same_variant(Token::Int("44".to_string())));
-    assert!(!Token::Int("33".to_string()).same_variant(Token::Ident("33".to_string())));
+    assert!(Token::EOF.same_variant(&Token::EOF));
+    assert!(!Token::EOF.same_variant(&Token::Comma));
+    assert!(Token::Int("33".to_string()).same_variant(&Token::Int("44".to_string())));
+    assert!(!Token::Int("33".to_string()).same_variant(&Token::Ident("33".to_string())));
   }
 
   #[test]

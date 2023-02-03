@@ -7,6 +7,19 @@ pub struct Parser {
   lexer: Lexer,
   cur_token: Token,
   peek_token: Token,
+  errors: Vec<ParsingError>,
+}
+
+pub enum ParsingError {
+  UnexpectedToken(String),
+}
+
+impl ParsingError {
+  fn message(&self) -> String {
+    match self {
+      ParsingError::UnexpectedToken(message) => format!("unexpected token - {}", message),
+    }
+  }
 }
 
 impl Parser {
@@ -17,6 +30,7 @@ impl Parser {
       lexer,
       cur_token,
       peek_token,
+      errors: Vec::new(),
     }
   }
 
@@ -41,7 +55,7 @@ impl Parser {
   fn parse_let_statement(&mut self) -> Option<Statement> {
     let let_token = self.cur_token.clone();
 
-    if !self.advance_if_peek(Token::Ident(String::new())) {
+    if !self.advance_expecting(Token::Ident(String::new())) {
       return None;
     }
 
@@ -50,24 +64,30 @@ impl Parser {
       value: self.cur_token.literal(),
     };
 
-    if !self.advance_if_peek(Token::Assign) {
+    if !self.advance_expecting(Token::Assign) {
       return None;
     }
 
     // TODO: skip over expression for now
-    while !self.cur_token.same_variant(Token::Semicolon) {
+    while !self.cur_token.same_variant(&Token::Semicolon) {
       self.advance();
     }
 
     Some(Statement::Let(let_token, name, Expr::Todo))
   }
 
-  fn advance_if_peek(&mut self, token: Token) -> bool {
-    if self.peek_token.same_variant(token) {
+  fn advance_expecting(&mut self, token: Token) -> bool {
+    if self.peek_token.same_variant(&token) {
       self.advance();
       return true;
+    } else {
+      self.errors.push(ParsingError::UnexpectedToken(format!(
+        "expected next token to be `{}`, got `{}` instead",
+        token.type_string(),
+        self.peek_token.type_string()
+      )));
+      return false;
     }
-    return false;
   }
 
   fn advance(&mut self) {
@@ -97,6 +117,7 @@ mod tests {
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
 
+    assert_no_parser_errors(&parser);
     assert_eq!(program.len(), 3);
 
     let cases = vec!["x", "y", "foobar"];
@@ -112,5 +133,12 @@ mod tests {
     } else {
       assert!(false, "expected let statement, got {:?}", statement);
     }
+  }
+
+  fn assert_no_parser_errors(parser: &Parser) {
+    for error in &parser.errors {
+      eprintln!("parser error: {}", error.message());
+    }
+    assert_eq!(parser.errors.len(), 0);
   }
 }
