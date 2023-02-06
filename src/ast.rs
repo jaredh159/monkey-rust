@@ -41,14 +41,14 @@ impl Node for Identifier {
 #[derive(Debug)]
 pub enum Statement {
   Let(Token, Identifier, Expr),
-  Return,
+  Return(Token, Expr),
 }
 
 impl Node for Statement {
   fn token_literal(&self) -> String {
     match self {
       Statement::Let(token, _, _) => token.literal(),
-      Statement::Return => "TODO".to_string(),
+      Statement::Return(token, _) => token.literal(),
     }
   }
 }

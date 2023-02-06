@@ -48,8 +48,21 @@ impl Parser {
   fn parse_statement(&mut self) -> Option<Statement> {
     return match self.cur_token {
       Token::Let => self.parse_let_statement(),
+      Token::Return => self.parse_return_statement(),
       _ => None,
     };
+  }
+
+  fn parse_return_statement(&mut self) -> Option<Statement> {
+    let return_token = self.cur_token.clone();
+    self.advance();
+
+    // TODO: skip over expression for now
+    while !self.cur_token.same_variant(&Token::Semicolon) {
+      self.advance();
+    }
+
+    Some(Statement::Return(return_token, Expr::Todo))
   }
 
   fn parse_let_statement(&mut self) -> Option<Statement> {
@@ -113,17 +126,40 @@ mod tests {
     let foobar = 838383;
     "#;
 
+    let program = assert_program(input, 3);
+
+    let cases = vec!["x", "y", "foobar"];
+    for (statement, expected) in program.iter().zip(cases.iter()) {
+      test_let_statement(statement, expected);
+    }
+  }
+
+  #[test]
+  fn test_return_statements() {
+    let input = r#"
+    return 5;
+    return 10;
+    return 993322;
+    "#;
+
+    let program = assert_program(input, 3);
+    for statement in program {
+      if let Statement::Return(token, _) = statement {
+        assert_eq!(token.literal(), "return");
+      } else {
+        assert!(false, "expected return statement, got {:?}", statement);
+      }
+    }
+  }
+
+  fn assert_program(input: &str, num_expected_statements: usize) -> Program {
     let lexer = Lexer::from(input);
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
 
     assert_no_parser_errors(&parser);
     assert_eq!(program.len(), 3);
-
-    let cases = vec!["x", "y", "foobar"];
-    for (statement, expected) in program.iter().zip(cases.iter()) {
-      test_let_statement(statement, expected);
-    }
+    program
   }
 
   fn test_let_statement(statement: &Statement, expected_ident: &str) {
