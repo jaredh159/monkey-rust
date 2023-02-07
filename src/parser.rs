@@ -3,6 +3,19 @@ use crate::lexer::Lexer;
 use crate::token::Token;
 use std::mem;
 
+type PrefixParseFn = fn(&mut Parser) -> Expr;
+type InfixParseFn = fn(&mut Parser, Expr) -> Expr;
+
+enum Precedence {
+  Lowest,
+  Equals,
+  LessGreater,
+  Sum,
+  Product,
+  Prefix,
+  Call,
+}
+
 pub struct Parser {
   lexer: Lexer,
   cur_token: Token,
@@ -34,6 +47,17 @@ impl Parser {
     }
   }
 
+  fn prefix_parse_fn(&self, token: &Token) -> Option<PrefixParseFn> {
+    match token {
+      Token::Ident(_) => Some(Parser::parse_identifier),
+      _ => None,
+    }
+  }
+
+  fn infix_parse_fn(&self, token: &Token) -> Option<InfixParseFn> {
+    None
+  }
+
   pub fn parse_program(&mut self) -> Program {
     let mut program = Vec::new();
     while self.cur_token != Token::EOF {
@@ -45,12 +69,39 @@ impl Parser {
     return program;
   }
 
+  fn parse_identifier(&mut self) -> Expr {
+    Expr::Ident(Identifier {
+      token: self.cur_token.clone(),
+      value: self.cur_token.literal(),
+    })
+  }
+
   fn parse_statement(&mut self) -> Option<Statement> {
     return match self.cur_token {
       Token::Let => self.parse_let_statement(),
       Token::Return => self.parse_return_statement(),
-      _ => None,
+      _ => self.parse_expression_statement(),
     };
+  }
+
+  fn parse_expression_statement(&mut self) -> Option<Statement> {
+    let initial_token = self.cur_token.clone();
+    let expression = self.parse_expression(Precedence::Lowest);
+    if expression.is_none() {
+      return None;
+    }
+    if self.peek_token == Token::Semicolon {
+      self.advance();
+    }
+    return Some(Statement::Expression(initial_token, expression.unwrap()));
+  }
+
+  fn parse_expression(&mut self, precedence: Precedence) -> Option<Expr> {
+    if let Some(prefix) = self.prefix_parse_fn(&self.cur_token) {
+      Some(prefix(self))
+    } else {
+      None
+    }
   }
 
   fn parse_return_statement(&mut self) -> Option<Statement> {
@@ -152,13 +203,33 @@ mod tests {
     }
   }
 
+  #[test]
+  fn test_identifier_expressions() {
+    let program = assert_program("foobar;", 1);
+    let (_, expr) = assert_expression_statement(&program[0]);
+    if let Expr::Ident(ident) = expr {
+      assert_eq!("foobar", ident.token.literal());
+      assert_eq!("foobar", ident.value);
+    } else {
+      assert!(false, "expression not an identifier, got {:?}", expr);
+    }
+  }
+
+  fn assert_expression_statement(statement: &Statement) -> (&Token, &Expr) {
+    if let Statement::Expression(token, expr) = statement {
+      return (token, expr);
+    } else {
+      panic!("statement is not an Expression, got: {:?}", statement);
+    }
+  }
+
   fn assert_program(input: &str, num_expected_statements: usize) -> Program {
     let lexer = Lexer::from(input);
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
 
     assert_no_parser_errors(&parser);
-    assert_eq!(program.len(), 3);
+    assert_eq!(program.len(), num_expected_statements);
     program
   }
 
