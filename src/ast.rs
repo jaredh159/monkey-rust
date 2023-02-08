@@ -22,6 +22,7 @@ impl Node for Program {
 #[derive(Debug)]
 pub enum Expr {
   Ident(Identifier),
+  IntegerLiteral(Token, i64),
   Todo,
 }
 
@@ -29,13 +30,15 @@ impl Node for Expr {
   fn token_literal(&self) -> String {
     match self {
       Expr::Ident(ident) => ident.token.literal(),
-      Expr::Todo => String::new(),
+      Expr::IntegerLiteral(token, _) => token.literal(),
+      Expr::Todo => String::from("TODO"),
     }
   }
 
   fn string(&self) -> String {
     match self {
       Expr::Ident(ident) => ident.string(),
+      Expr::IntegerLiteral(token, _) => token.literal(),
       Expr::Todo => String::from("TODO"),
     }
   }

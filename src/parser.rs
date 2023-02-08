@@ -3,8 +3,8 @@ use crate::lexer::Lexer;
 use crate::token::Token;
 use std::mem;
 
-type PrefixParseFn = fn(&mut Parser) -> Expr;
-type InfixParseFn = fn(&mut Parser, Expr) -> Expr;
+type PrefixParseFn = fn(&mut Parser) -> Option<Expr>;
+type InfixParseFn = fn(&mut Parser, Expr) -> Option<Expr>;
 
 enum Precedence {
   Lowest,
@@ -25,12 +25,14 @@ pub struct Parser {
 
 pub enum ParsingError {
   UnexpectedToken(String),
+  IntegerConversionError(String),
 }
 
 impl ParsingError {
   fn message(&self) -> String {
     match self {
       ParsingError::UnexpectedToken(message) => format!("unexpected token - {}", message),
+      ParsingError::IntegerConversionError(string) => format!("could not parse {} to i64", string),
     }
   }
 }
@@ -50,6 +52,7 @@ impl Parser {
   fn prefix_parse_fn(&self, token: &Token) -> Option<PrefixParseFn> {
     match token {
       Token::Ident(_) => Some(Parser::parse_identifier),
+      Token::Int(_) => Some(Parser::parse_integer_literal),
       _ => None,
     }
   }
@@ -69,11 +72,26 @@ impl Parser {
     return program;
   }
 
-  fn parse_identifier(&mut self) -> Expr {
-    Expr::Ident(Identifier {
+  fn parse_identifier(&mut self) -> Option<Expr> {
+    Some(Expr::Ident(Identifier {
       token: self.cur_token.clone(),
       value: self.cur_token.literal(),
-    })
+    }))
+  }
+
+  fn parse_integer_literal(&mut self) -> Option<Expr> {
+    self
+      .cur_token
+      .literal()
+      .parse::<i64>()
+      .ok()
+      .map(|value| Expr::IntegerLiteral(self.cur_token.clone(), value))
+      .or_else(|| {
+        self.errors.push(ParsingError::IntegerConversionError(
+          self.cur_token.literal(),
+        ));
+        None
+      })
   }
 
   fn parse_statement(&mut self) -> Option<Statement> {
@@ -98,7 +116,7 @@ impl Parser {
 
   fn parse_expression(&mut self, precedence: Precedence) -> Option<Expr> {
     if let Some(prefix) = self.prefix_parse_fn(&self.cur_token) {
-      Some(prefix(self))
+      prefix(self)
     } else {
       None
     }
@@ -210,6 +228,18 @@ mod tests {
     if let Expr::Ident(ident) = expr {
       assert_eq!("foobar", ident.token.literal());
       assert_eq!("foobar", ident.value);
+    } else {
+      assert!(false, "expression not an identifier, got {:?}", expr);
+    }
+  }
+
+  #[test]
+  fn test_integer_literal_expression() {
+    let program = assert_program("5;", 1);
+    let (_, expr) = assert_expression_statement(&program[0]);
+    if let Expr::IntegerLiteral(token, value) = expr {
+      assert_eq!("5", token.literal());
+      assert_eq!(5, *value);
     } else {
       assert!(false, "expression not an identifier, got {:?}", expr);
     }
