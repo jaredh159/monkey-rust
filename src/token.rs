@@ -68,7 +68,7 @@ impl Token {
       Token::Assign => "=".to_string(),
       Token::Plus => "+".to_string(),
       Token::Minus => "-".to_string(),
-      Token::Bang => "+".to_string(),
+      Token::Bang => "!".to_string(),
       Token::Asterisk => "*".to_string(),
       Token::Slash => "/".to_string(),
       Token::Lt => "<".to_string(),

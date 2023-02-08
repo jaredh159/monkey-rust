@@ -23,6 +23,7 @@ impl Node for Program {
 pub enum Expr {
   Ident(Identifier),
   IntegerLiteral(Token, i64),
+  Prefix(Token, String, Box<Expr>),
   Todo,
 }
 
@@ -31,6 +32,7 @@ impl Node for Expr {
     match self {
       Expr::Ident(ident) => ident.token.literal(),
       Expr::IntegerLiteral(token, _) => token.literal(),
+      Expr::Prefix(token, _, _) => token.literal(),
       Expr::Todo => String::from("TODO"),
     }
   }
@@ -39,6 +41,7 @@ impl Node for Expr {
     match self {
       Expr::Ident(ident) => ident.string(),
       Expr::IntegerLiteral(token, _) => token.literal(),
+      Expr::Prefix(_, operator, expr) => format!("({}{})", operator, expr.string()),
       Expr::Todo => String::from("TODO"),
     }
   }

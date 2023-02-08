@@ -26,6 +26,7 @@ pub struct Parser {
 pub enum ParsingError {
   UnexpectedToken(String),
   IntegerConversionError(String),
+  NoPrefixParseFn(Token),
 }
 
 impl ParsingError {
@@ -33,6 +34,9 @@ impl ParsingError {
     match self {
       ParsingError::UnexpectedToken(message) => format!("unexpected token - {}", message),
       ParsingError::IntegerConversionError(string) => format!("could not parse {} to i64", string),
+      ParsingError::NoPrefixParseFn(token) => {
+        format!("no prefix parse fn for {}", token.type_string())
+      }
     }
   }
 }
@@ -53,6 +57,7 @@ impl Parser {
     match token {
       Token::Ident(_) => Some(Parser::parse_identifier),
       Token::Int(_) => Some(Parser::parse_integer_literal),
+      Token::Bang | Token::Minus => Some(Parser::parse_prefix_expression),
       _ => None,
     }
   }
@@ -70,6 +75,18 @@ impl Parser {
       self.advance();
     }
     return program;
+  }
+
+  fn parse_prefix_expression(&mut self) -> Option<Expr> {
+    let initial_token = self.cur_token.clone();
+    self.advance();
+    self.parse_expression(Precedence::Prefix).map(|expr| {
+      Expr::Prefix(
+        initial_token.clone(),
+        initial_token.literal(),
+        Box::new(expr),
+      )
+    })
   }
 
   fn parse_identifier(&mut self) -> Option<Expr> {
@@ -106,6 +123,9 @@ impl Parser {
     let initial_token = self.cur_token.clone();
     let expression = self.parse_expression(Precedence::Lowest);
     if expression.is_none() {
+      self
+        .errors
+        .push(ParsingError::NoPrefixParseFn(initial_token));
       return None;
     }
     if self.peek_token == Token::Semicolon {
@@ -237,11 +257,30 @@ mod tests {
   fn test_integer_literal_expression() {
     let program = assert_program("5;", 1);
     let (_, expr) = assert_expression_statement(&program[0]);
+    assert_integer_literal(expr, 5);
+  }
+
+  #[test]
+  fn test_parsing_prefix_expressions() {
+    let cases = vec![("!5;", "!", 5), ("-15;", "-", 15)];
+    for (input, expected_operator, expected_value) in cases {
+      let program = assert_program(input, 1);
+      let (_, expr) = assert_expression_statement(&program[0]);
+      if let Expr::Prefix(_, operator, expr) = expr {
+        assert_eq!(operator, expected_operator);
+        assert_integer_literal(expr, expected_value);
+      } else {
+        assert!(false, "expression not a prefix, got {:?}", expr);
+      }
+    }
+  }
+
+  fn assert_integer_literal(expr: &Expr, expected_value: i64) {
     if let Expr::IntegerLiteral(token, value) = expr {
-      assert_eq!("5", token.literal());
-      assert_eq!(5, *value);
+      assert_eq!(expected_value.to_string(), token.literal());
+      assert_eq!(expected_value, *value);
     } else {
-      assert!(false, "expression not an identifier, got {:?}", expr);
+      assert!(false, "expression not an integer literal, got {:?}", expr);
     }
   }
 
