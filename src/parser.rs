@@ -14,7 +14,7 @@ enum Precedence {
   Sum,
   Product,
   Prefix,
-  Call,
+  // Call,
 }
 
 impl Token {
@@ -46,6 +46,7 @@ pub enum ParsingError {
   NoPrefixParseFn(Token),
 }
 
+#[cfg(test)]
 impl ParsingError {
   fn message(&self) -> String {
     match self {
@@ -110,22 +111,25 @@ impl Parser {
   }
 
   fn parse_expression(&mut self, precedence: Precedence) -> Option<Expr> {
-    let mut expr = self
+    let expr = self
       .prefix_parse_fn()
       .map(|prefix_fn| prefix_fn(self))
       .flatten();
 
-    if let Some(left) = expr.clone() {
-      while self.peek_token != Token::Semicolon && precedence < self.peek_token.precedence() {
-        if let Some(infix_fn) = self.infix_parse_fn() {
-          self.advance();
-          expr = infix_fn(self, left.clone());
-        } else {
-          return expr;
-        }
+    let mut expr = match expr {
+      Some(expr) => expr,
+      None => return None,
+    };
+
+    while self.peek_token != Token::Semicolon && precedence < self.peek_token.precedence() {
+      if let Some(infix_fn) = self.infix_parse_fn() {
+        self.advance();
+        expr = infix_fn(self, expr.clone()).unwrap_or(expr);
+      } else {
+        return Some(expr);
       }
     }
-    return expr;
+    Some(expr)
   }
 
   fn parse_prefix_expression(&mut self) -> Option<Expr> {
@@ -261,6 +265,11 @@ mod tests {
   use crate::lexer::*;
   use crate::parser::*;
 
+  enum Lit<'a> {
+    Int(i64),
+    Str(&'a str),
+  }
+
   #[test]
   fn test_let_statements() {
     let input = r#"
@@ -298,59 +307,83 @@ mod tests {
   #[test]
   fn test_identifier_expressions() {
     let program = assert_program("foobar;", 1);
-    let (_, expr) = assert_expression_statement(&program[0]);
-    if let Expr::Ident(ident) = expr {
-      assert_eq!("foobar", ident.token.literal());
-      assert_eq!("foobar", ident.value);
-    } else {
-      assert!(false, "expression not an identifier, got {:?}", expr);
-    }
+    let expr = assert_expression_statement(&program[0]);
+    assert_identifier(&expr, "foobar");
   }
 
   #[test]
   fn test_integer_literal_expression() {
     let program = assert_program("5;", 1);
-    let (_, expr) = assert_expression_statement(&program[0]);
+    let expr = assert_expression_statement(&program[0]);
     assert_integer_literal(expr, 5);
-  }
-
-  #[test]
-  fn test_parsing_prefix_expressions() {
-    let cases = vec![("!5;", "!", 5), ("-15;", "-", 15)];
-    for (input, expected_operator, expected_value) in cases {
-      let program = assert_program(input, 1);
-      let (_, expr) = assert_expression_statement(&program[0]);
-      if let Expr::Prefix(_, operator, expr) = expr {
-        assert_eq!(operator, expected_operator);
-        assert_integer_literal(expr, expected_value);
-      } else {
-        assert!(false, "expression not a prefix, got {:?}", expr);
-      }
-    }
   }
 
   #[test]
   fn test_parsing_infix_expressions() {
     let cases = vec![
-      ("5 + 5;", 5, "+", 5),
-      ("5 - 5;", 5, "-", 5),
-      ("5 * 5;", 5, "*", 5),
-      ("5 / 5;", 5, "/", 5),
-      ("5 > 5;", 5, ">", 5),
-      ("5 < 5;", 5, "<", 5),
-      ("5 == 5;", 5, "==", 5),
-      ("5 != 5;", 5, "!=", 5),
+      ("5 + 5;", Lit::Int(5), "+", Lit::Int(5)),
+      ("5 - 5;", Lit::Int(5), "-", Lit::Int(5)),
+      ("5 * 5;", Lit::Int(5), "*", Lit::Int(5)),
+      ("5 / 5;", Lit::Int(5), "/", Lit::Int(5)),
+      ("5 > 5;", Lit::Int(5), ">", Lit::Int(5)),
+      ("5 < 5;", Lit::Int(5), "<", Lit::Int(5)),
+      ("5 == 5;", Lit::Int(5), "==", Lit::Int(5)),
+      ("5 != 5;", Lit::Int(5), "!=", Lit::Int(5)),
+      ("foo != bar;", Lit::Str("foo"), "!=", Lit::Str("bar")),
     ];
-    for (input, expected_lhs, expected_operator, expected_rhs) in cases {
+    for (input, lhs, operator, rhs) in cases {
       let program = assert_program(input, 1);
-      let (_, expr) = assert_expression_statement(&program[0]);
-      if let Expr::Infix(_, lhs, operator, rhs) = expr {
-        assert_integer_literal(lhs, expected_lhs);
-        assert_eq!(operator, expected_operator);
-        assert_integer_literal(rhs, expected_rhs);
-      } else {
-        assert!(false, "expression not a infix, got {:?}", expr);
+      let expr = assert_expression_statement(&program[0]);
+      assert_infix(&expr, lhs, operator, rhs);
+    }
+  }
+
+  #[test]
+  fn test_operator_precedence() {
+    let cases = vec![
+      ("-a * b", "((-a) * b)"),
+      ("!-a", "(!(-a))"),
+      ("a + b + c", "((a + b) + c)"),
+      ("a + b - c", "((a + b) - c)"),
+      ("a * b * c", "((a * b) * c)"),
+      ("a * b / c", "((a * b) / c)"),
+      ("a + b / c", "(a + (b / c))"),
+      ("a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f)"),
+      ("3 + 4; -5 * 5", "(3 + 4)((-5) * 5)"),
+      ("5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"),
+      ("5 < 4 != 3 > 4", "((5 < 4) != (3 > 4))"),
+      (
+        "3 + 4 * 5 == 3 * 1 + 4 * 5",
+        "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+      ),
+    ];
+    for (input, expected) in cases {
+      let lexer = Lexer::from(input);
+      let mut parser = Parser::new(lexer);
+      let program = parser.parse_program();
+      assert_no_parser_errors(&parser);
+      assert_eq!(program.string(), expected)
+    }
+  }
+
+  fn assert_literal<'a>(expr: &Expr, lit: Lit<'a>) {
+    match lit {
+      Lit::Int(int) => {
+        assert_integer_literal(expr, int);
       }
+      Lit::Str(string) => {
+        assert_identifier(expr, string);
+      }
+    }
+  }
+
+  fn assert_identifier<'a>(expr: &'a Expr, expected_value: &str) -> &'a Identifier {
+    if let Expr::Ident(ident) = expr {
+      assert_eq!(expected_value, ident.token.literal());
+      assert_eq!(expected_value, ident.value);
+      return ident;
+    } else {
+      panic!("expression not an identifier, got {:?}", expr);
     }
   }
 
@@ -363,9 +396,24 @@ mod tests {
     }
   }
 
-  fn assert_expression_statement(statement: &Statement) -> (&Token, &Expr) {
-    if let Statement::Expression(token, expr) = statement {
-      return (token, expr);
+  fn assert_infix<'a>(
+    expr: &Expr,
+    expected_lhs: Lit<'a>,
+    expected_operator: &str,
+    expected_rhs: Lit<'a>,
+  ) {
+    if let Expr::Infix(_, lhs, operator, rhs) = expr {
+      assert_literal(lhs, expected_lhs);
+      assert_eq!(operator, expected_operator);
+      assert_literal(rhs, expected_rhs);
+    } else {
+      assert!(false, "expression not a infix, got {:?}", expr);
+    }
+  }
+
+  fn assert_expression_statement(statement: &Statement) -> &Expr {
+    if let Statement::Expression(_, expr) = statement {
+      return expr;
     } else {
       panic!("statement is not an Expression, got: {:?}", statement);
     }
