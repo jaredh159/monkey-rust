@@ -19,11 +19,12 @@ impl Node for Program {
   }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Expr {
   Ident(Identifier),
   IntegerLiteral(Token, i64),
   Prefix(Token, String, Box<Expr>),
+  Infix(Token, Box<Expr>, String, Box<Expr>),
   Todo,
 }
 
@@ -33,6 +34,7 @@ impl Node for Expr {
       Expr::Ident(ident) => ident.token.literal(),
       Expr::IntegerLiteral(token, _) => token.literal(),
       Expr::Prefix(token, _, _) => token.literal(),
+      Expr::Infix(token, _, _, _) => token.literal(),
       Expr::Todo => String::from("TODO"),
     }
   }
@@ -42,12 +44,15 @@ impl Node for Expr {
       Expr::Ident(ident) => ident.string(),
       Expr::IntegerLiteral(token, _) => token.literal(),
       Expr::Prefix(_, operator, expr) => format!("({}{})", operator, expr.string()),
+      Expr::Infix(_, lhs, operator, rhs) => {
+        format!("({} {} {})", lhs.string(), operator, rhs.string())
+      }
       Expr::Todo => String::from("TODO"),
     }
   }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Identifier {
   pub token: Token,
   pub value: String,

@@ -6,6 +6,7 @@ use std::mem;
 type PrefixParseFn = fn(&mut Parser) -> Option<Expr>;
 type InfixParseFn = fn(&mut Parser, Expr) -> Option<Expr>;
 
+#[derive(PartialEq, PartialOrd)]
 enum Precedence {
   Lowest,
   Equals,
@@ -14,6 +15,22 @@ enum Precedence {
   Product,
   Prefix,
   Call,
+}
+
+impl Token {
+  fn precedence(&self) -> Precedence {
+    match self {
+      Token::Eq => Precedence::Equals,
+      Token::NotEq => Precedence::Equals,
+      Token::Lt => Precedence::LessGreater,
+      Token::Gt => Precedence::LessGreater,
+      Token::Plus => Precedence::Sum,
+      Token::Minus => Precedence::Sum,
+      Token::Slash => Precedence::Product,
+      Token::Asterisk => Precedence::Product,
+      _ => Precedence::Lowest,
+    }
+  }
 }
 
 pub struct Parser {
@@ -53,17 +70,32 @@ impl Parser {
     }
   }
 
-  fn prefix_parse_fn(&self, token: &Token) -> Option<PrefixParseFn> {
-    match token {
+  fn prefix_parse_fn(&mut self) -> Option<PrefixParseFn> {
+    match &self.cur_token {
       Token::Ident(_) => Some(Parser::parse_identifier),
       Token::Int(_) => Some(Parser::parse_integer_literal),
       Token::Bang | Token::Minus => Some(Parser::parse_prefix_expression),
-      _ => None,
+      _ => {
+        self
+          .errors
+          .push(ParsingError::NoPrefixParseFn(self.cur_token.clone()));
+        None
+      }
     }
   }
 
-  fn infix_parse_fn(&self, token: &Token) -> Option<InfixParseFn> {
-    None
+  fn infix_parse_fn(&mut self) -> Option<InfixParseFn> {
+    match &self.peek_token {
+      Token::Eq
+      | Token::NotEq
+      | Token::Lt
+      | Token::Gt
+      | Token::Plus
+      | Token::Minus
+      | Token::Slash
+      | Token::Asterisk => Some(Parser::parse_infix_expression),
+      _ => None,
+    }
   }
 
   pub fn parse_program(&mut self) -> Program {
@@ -77,6 +109,25 @@ impl Parser {
     return program;
   }
 
+  fn parse_expression(&mut self, precedence: Precedence) -> Option<Expr> {
+    let mut expr = self
+      .prefix_parse_fn()
+      .map(|prefix_fn| prefix_fn(self))
+      .flatten();
+
+    if let Some(left) = expr.clone() {
+      while self.peek_token != Token::Semicolon && precedence < self.peek_token.precedence() {
+        if let Some(infix_fn) = self.infix_parse_fn() {
+          self.advance();
+          expr = infix_fn(self, left.clone());
+        } else {
+          return expr;
+        }
+      }
+    }
+    return expr;
+  }
+
   fn parse_prefix_expression(&mut self) -> Option<Expr> {
     let initial_token = self.cur_token.clone();
     self.advance();
@@ -85,6 +136,20 @@ impl Parser {
         initial_token.clone(),
         initial_token.literal(),
         Box::new(expr),
+      )
+    })
+  }
+
+  fn parse_infix_expression(&mut self, left: Expr) -> Option<Expr> {
+    let operator_token = self.cur_token.clone();
+    let precedence = operator_token.precedence();
+    self.advance();
+    self.parse_expression(precedence).map(|right| {
+      Expr::Infix(
+        operator_token.clone(),
+        Box::new(left),
+        operator_token.literal(),
+        Box::new(right),
       )
     })
   }
@@ -123,23 +188,12 @@ impl Parser {
     let initial_token = self.cur_token.clone();
     let expression = self.parse_expression(Precedence::Lowest);
     if expression.is_none() {
-      self
-        .errors
-        .push(ParsingError::NoPrefixParseFn(initial_token));
       return None;
     }
     if self.peek_token == Token::Semicolon {
       self.advance();
     }
     return Some(Statement::Expression(initial_token, expression.unwrap()));
-  }
-
-  fn parse_expression(&mut self, precedence: Precedence) -> Option<Expr> {
-    if let Some(prefix) = self.prefix_parse_fn(&self.cur_token) {
-      prefix(self)
-    } else {
-      None
-    }
   }
 
   fn parse_return_statement(&mut self) -> Option<Statement> {
@@ -271,6 +325,31 @@ mod tests {
         assert_integer_literal(expr, expected_value);
       } else {
         assert!(false, "expression not a prefix, got {:?}", expr);
+      }
+    }
+  }
+
+  #[test]
+  fn test_parsing_infix_expressions() {
+    let cases = vec![
+      ("5 + 5;", 5, "+", 5),
+      ("5 - 5;", 5, "-", 5),
+      ("5 * 5;", 5, "*", 5),
+      ("5 / 5;", 5, "/", 5),
+      ("5 > 5;", 5, ">", 5),
+      ("5 < 5;", 5, "<", 5),
+      ("5 == 5;", 5, "==", 5),
+      ("5 != 5;", 5, "!=", 5),
+    ];
+    for (input, expected_lhs, expected_operator, expected_rhs) in cases {
+      let program = assert_program(input, 1);
+      let (_, expr) = assert_expression_statement(&program[0]);
+      if let Expr::Infix(_, lhs, operator, rhs) = expr {
+        assert_integer_literal(lhs, expected_lhs);
+        assert_eq!(operator, expected_operator);
+        assert_integer_literal(rhs, expected_rhs);
+      } else {
+        assert!(false, "expression not a infix, got {:?}", expr);
       }
     }
   }
