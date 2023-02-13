@@ -76,6 +76,7 @@ impl Parser {
       Token::Ident(_) => Some(Parser::parse_identifier),
       Token::Int(_) => Some(Parser::parse_integer_literal),
       Token::Bang | Token::Minus => Some(Parser::parse_prefix_expression),
+      Token::True | Token::False => Some(Parser::parse_boolean_literal),
       _ => {
         self
           .errors
@@ -163,6 +164,13 @@ impl Parser {
       token: self.cur_token.clone(),
       value: self.cur_token.literal(),
     }))
+  }
+
+  fn parse_boolean_literal(&mut self) -> Option<Expr> {
+    Some(Expr::BooleanLiteral(
+      self.cur_token.clone(),
+      self.cur_token == Token::True,
+    ))
   }
 
   fn parse_integer_literal(&mut self) -> Option<Expr> {
@@ -268,6 +276,7 @@ mod tests {
   enum Lit<'a> {
     Int(i64),
     Str(&'a str),
+    Bool(bool),
   }
 
   #[test]
@@ -319,8 +328,42 @@ mod tests {
   }
 
   #[test]
+  fn test_boolean_expressions() {
+    let cases = vec![("true;", true), ("false;", false)];
+    for (input, expected) in cases {
+      let program = assert_program(input, 1);
+      let expr = assert_expression_statement(&program[0]);
+      assert_boolean_literal(expr, expected);
+    }
+  }
+
+  #[test]
+  fn test_parsing_prefix_expressions() {
+    let cases = vec![
+      ("!true;", "!", Lit::Bool(true)),
+      ("!false;", "!", Lit::Bool(false)),
+      ("!5;", "!", Lit::Int(5)),
+      ("!5;", "!", Lit::Int(5)),
+      ("-15;", "-", Lit::Int(15)),
+    ];
+    for (input, expected_operator, expected_value) in cases {
+      let program = assert_program(input, 1);
+      let expr = assert_expression_statement(&program[0]);
+      if let Expr::Prefix(_, operator, expr) = expr {
+        assert_eq!(operator, expected_operator);
+        assert_literal(expr, expected_value);
+      } else {
+        assert!(false, "expression not a prefix, got {:?}", expr);
+      }
+    }
+  }
+
+  #[test]
   fn test_parsing_infix_expressions() {
     let cases = vec![
+      ("true != false;", Lit::Bool(true), "!=", Lit::Bool(false)),
+      ("false == false;", Lit::Bool(false), "==", Lit::Bool(false)),
+      ("true == true;", Lit::Bool(true), "==", Lit::Bool(true)),
       ("5 + 5;", Lit::Int(5), "+", Lit::Int(5)),
       ("5 - 5;", Lit::Int(5), "-", Lit::Int(5)),
       ("5 * 5;", Lit::Int(5), "*", Lit::Int(5)),
@@ -341,6 +384,10 @@ mod tests {
   #[test]
   fn test_operator_precedence() {
     let cases = vec![
+      ("true", "true"),
+      ("false", "false"),
+      ("3 > 5 == false", "((3 > 5) == false)"),
+      ("3 < 5 == true", "((3 < 5) == true)"),
       ("-a * b", "((-a) * b)"),
       ("!-a", "(!(-a))"),
       ("a + b + c", "((a + b) + c)"),
@@ -374,6 +421,9 @@ mod tests {
       Lit::Str(string) => {
         assert_identifier(expr, string);
       }
+      Lit::Bool(boolean) => {
+        assert_boolean_literal(expr, boolean);
+      }
     }
   }
 
@@ -384,6 +434,15 @@ mod tests {
       return ident;
     } else {
       panic!("expression not an identifier, got {:?}", expr);
+    }
+  }
+
+  fn assert_boolean_literal(expr: &Expr, expected_value: bool) {
+    if let Expr::BooleanLiteral(token, value) = expr {
+      assert_eq!(format!("{}", expected_value), token.literal());
+      assert_eq!(*value, expected_value);
+    } else {
+      panic!("expression not a boolean literal, got {:?}", expr);
     }
   }
 

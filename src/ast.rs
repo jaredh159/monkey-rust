@@ -23,6 +23,7 @@ impl Node for Program {
 pub enum Expr {
   Ident(Identifier),
   IntegerLiteral(Token, i64),
+  BooleanLiteral(Token, bool),
   Prefix(Token, String, Box<Expr>),
   Infix(Token, Box<Expr>, String, Box<Expr>),
   Todo,
@@ -35,6 +36,7 @@ impl Node for Expr {
       Expr::IntegerLiteral(token, _) => token.literal(),
       Expr::Prefix(token, _, _) => token.literal(),
       Expr::Infix(token, _, _, _) => token.literal(),
+      Expr::BooleanLiteral(token, _) => token.literal(),
       Expr::Todo => String::from("TODO"),
     }
   }
@@ -43,6 +45,7 @@ impl Node for Expr {
     match self {
       Expr::Ident(ident) => ident.string(),
       Expr::IntegerLiteral(token, _) => token.literal(),
+      Expr::BooleanLiteral(token, _) => token.literal(),
       Expr::Prefix(_, operator, expr) => format!("({}{})", operator, expr.string()),
       Expr::Infix(_, lhs, operator, rhs) => {
         format!("({} {} {})", lhs.string(), operator, rhs.string())
