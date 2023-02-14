@@ -78,6 +78,7 @@ impl Parser {
       Token::Bang | Token::Minus => Some(Parser::parse_prefix_expression),
       Token::True | Token::False => Some(Parser::parse_boolean_literal),
       Token::LParen => Some(Parser::parse_grouped_expression),
+      Token::If => Some(Parser::parse_if_expression),
       _ => {
         self
           .errors
@@ -158,6 +159,63 @@ impl Parser {
         Box::new(right),
       )
     })
+  }
+
+  fn parse_block_statement(&mut self) -> BlockStatement {
+    let initial_token = self.cur_token.clone();
+    let mut statements: Vec<Statement> = Vec::new();
+    self.advance();
+
+    while self.cur_token != Token::RBrace && self.cur_token != Token::EOF {
+      if let Some(stmt) = self.parse_statement() {
+        statements.push(stmt);
+      }
+      self.advance();
+    }
+
+    BlockStatement {
+      token: initial_token,
+      statements,
+    }
+  }
+
+  fn parse_if_expression(&mut self) -> Option<Expr> {
+    let initial_token = self.cur_token.clone();
+    if !self.advance_expecting(Token::LParen) {
+      return None;
+    }
+
+    self.advance();
+    let condition = match self.parse_expression(Precedence::Lowest) {
+      Some(cond) => cond,
+      None => return None,
+    };
+
+    if !self.advance_expecting(Token::RParen) {
+      return None;
+    }
+
+    if !self.advance_expecting(Token::LBrace) {
+      return None;
+    }
+
+    let consequence = self.parse_block_statement();
+    let mut alternative: Option<BlockStatement> = None;
+
+    if self.peek_token == Token::Else {
+      self.advance();
+      if !self.advance_expecting(Token::LBrace) {
+        return None;
+      }
+      alternative = Some(self.parse_block_statement());
+    }
+
+    Some(Expr::If(IfExpression {
+      token: initial_token,
+      condition: Box::new(condition),
+      consequence,
+      alternative,
+    }))
   }
 
   fn parse_identifier(&mut self) -> Option<Expr> {
@@ -425,6 +483,42 @@ mod tests {
       let program = parser.parse_program();
       assert_no_parser_errors(&parser);
       assert_eq!(program.string(), expected)
+    }
+  }
+
+  #[test]
+  fn test_if_expression() {
+    let program = assert_program("if (x < y) { x }", 1);
+    let expr = assert_expression_statement(&program[0]);
+    if let Expr::If(expr) = expr {
+      assert_infix(&expr.condition, Lit::Str("x"), "<", Lit::Str("y"));
+      assert_eq!(expr.consequence.statements.len(), 1);
+      let consequence = assert_expression_statement(&expr.consequence.statements[0]);
+      assert_identifier(consequence, "x");
+      assert!(expr.alternative.is_none());
+    } else {
+      panic!("expression not a prefix, got {:?}", expr);
+    }
+  }
+
+  #[test]
+  fn test_if_else_expression() {
+    let program = assert_program("if (x < y) { x } else { y }", 1);
+    let expr = assert_expression_statement(&program[0]);
+    if let Expr::If(expr) = expr {
+      assert_infix(&expr.condition, Lit::Str("x"), "<", Lit::Str("y"));
+      assert_eq!(expr.consequence.statements.len(), 1);
+      let cons_stmt = assert_expression_statement(&expr.consequence.statements[0]);
+      assert_identifier(cons_stmt, "x");
+      let alternative = expr
+        .alternative
+        .as_ref()
+        .expect("expected alternative not to be missing");
+      assert_eq!(alternative.statements.len(), 1);
+      let alternative_stmt = assert_expression_statement(&alternative.statements[0]);
+      assert_identifier(alternative_stmt, "y");
+    } else {
+      panic!("expression not a prefix, got {:?}", expr);
     }
   }
 
