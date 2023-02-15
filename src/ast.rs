@@ -28,6 +28,13 @@ pub struct IfExpression {
 }
 
 #[derive(Clone, Debug)]
+pub struct FunctionLiteral {
+  pub token: Token,
+  pub parameters: Vec<Identifier>,
+  pub body: BlockStatement,
+}
+
+#[derive(Clone, Debug)]
 pub enum Expr {
   Ident(Identifier),
   IntegerLiteral(Token, i64),
@@ -35,6 +42,7 @@ pub enum Expr {
   Prefix(Token, String, Box<Expr>),
   Infix(Token, Box<Expr>, String, Box<Expr>),
   If(IfExpression),
+  Function(FunctionLiteral),
   Todo,
 }
 
@@ -47,6 +55,7 @@ impl Node for Expr {
       Expr::Infix(token, _, _, _) => token.literal(),
       Expr::BooleanLiteral(token, _) => token.literal(),
       Expr::If(if_expr) => if_expr.token.literal(),
+      Expr::Function(fn_literal) => fn_literal.token.literal(),
       Expr::Todo => String::from("TODO"),
     }
   }
@@ -59,6 +68,19 @@ impl Node for Expr {
       Expr::Prefix(_, operator, expr) => format!("({}{})", operator, expr.string()),
       Expr::Infix(_, lhs, operator, rhs) => {
         format!("({} {} {})", lhs.string(), operator, rhs.string())
+      }
+      Expr::Function(fn_literal) => {
+        format!(
+          "{} ({}) {}",
+          fn_literal.token.literal(),
+          fn_literal
+            .parameters
+            .iter()
+            .map(|p| p.string())
+            .collect::<Vec<_>>()
+            .join(", "),
+          fn_literal.body.string()
+        )
       }
       Expr::If(if_expr) => {
         let mut string = format!(

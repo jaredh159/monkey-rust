@@ -79,6 +79,7 @@ impl Parser {
       Token::True | Token::False => Some(Parser::parse_boolean_literal),
       Token::LParen => Some(Parser::parse_grouped_expression),
       Token::If => Some(Parser::parse_if_expression),
+      Token::Function => Some(Parser::parse_fn_literal),
       _ => {
         self
           .errors
@@ -254,6 +255,59 @@ impl Parser {
       return None;
     }
     exp
+  }
+
+  fn parse_fn_literal(&mut self) -> Option<Expr> {
+    let token = self.cur_token.clone();
+    if !self.advance_expecting(Token::LParen) {
+      return None;
+    }
+
+    let parameters = match self.parse_fn_params() {
+      Some(params) => params,
+      None => return None,
+    };
+
+    if !self.advance_expecting(Token::LBrace) {
+      return None;
+    }
+
+    Some(Expr::Function(FunctionLiteral {
+      token,
+      parameters,
+      body: self.parse_block_statement(),
+    }))
+  }
+
+  fn parse_fn_params(&mut self) -> Option<Vec<Identifier>> {
+    let mut identifiers = Vec::new();
+    if self.peek_token == Token::RParen {
+      self.advance();
+      return Some(identifiers);
+    }
+
+    self.advance();
+
+    // first param
+    identifiers.push(Identifier {
+      token: self.cur_token.clone(),
+      value: self.cur_token.literal(),
+    });
+
+    while self.peek_token == Token::Comma {
+      self.advance();
+      self.advance();
+      identifiers.push(Identifier {
+        token: self.cur_token.clone(),
+        value: self.cur_token.literal(),
+      });
+    }
+
+    if !self.advance_expecting(Token::RParen) {
+      return None;
+    }
+
+    Some(identifiers)
   }
 
   fn parse_statement(&mut self) -> Option<Statement> {
@@ -519,6 +573,43 @@ mod tests {
       assert_identifier(alternative_stmt, "y");
     } else {
       panic!("expression not a prefix, got {:?}", expr);
+    }
+  }
+
+  #[test]
+  fn test_function_literal() {
+    let program = assert_program("fn(x, y) { x + y ; }", 1);
+    let expr = assert_expression_statement(&program[0]);
+    if let Expr::Function(fn_lit) = expr {
+      assert_eq!(fn_lit.parameters.len(), 2);
+      assert_eq!(fn_lit.parameters[0].value, "x");
+      assert_eq!(fn_lit.parameters[1].value, "y");
+      assert_eq!(fn_lit.body.statements.len(), 1);
+      let expr = assert_expression_statement(&fn_lit.body.statements[0]);
+      assert_infix(expr, Lit::Str("x"), "+", Lit::Str("y"));
+    } else {
+      panic!("expression not a function literal, got {:?}", expr);
+    }
+  }
+
+  #[test]
+  fn test_parameter_parsing() {
+    let cases = vec![
+      ("fn() {};", vec![]),
+      ("fn(x) {};", vec!["x"]),
+      ("fn(x, y, z) {};", vec!["x", "y", "z"]),
+    ];
+    for (input, expected) in cases {
+      let program = assert_program(input, 1);
+      let expr = assert_expression_statement(&program[0]);
+      if let Expr::Function(fn_lit) = expr {
+        assert_eq!(fn_lit.parameters.len(), expected.len());
+        for (param, expected_ident) in fn_lit.parameters.iter().zip(expected) {
+          assert_eq!(param.value, expected_ident);
+        }
+      } else {
+        panic!("expression not a function literal, got {:?}", expr);
+      }
     }
   }
 
