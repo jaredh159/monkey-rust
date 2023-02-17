@@ -1,6 +1,6 @@
-use crate::ast::*;
-use crate::lexer::Lexer;
+use crate::parser::{err::ParsingError, node::Program, stmt::Statement};
 use crate::token::Token;
+use crate::{lexer::Lexer, parser::expr::*};
 use std::mem;
 
 type PrefixParseFn = fn(&mut Parser) -> Option<Expr>;
@@ -38,25 +38,6 @@ pub struct Parser {
   cur_token: Token,
   peek_token: Token,
   errors: Vec<ParsingError>,
-}
-
-pub enum ParsingError {
-  UnexpectedToken(String),
-  IntegerConversionError(String),
-  NoPrefixParseFn(Token),
-}
-
-#[cfg(test)]
-impl ParsingError {
-  fn message(&self) -> String {
-    match self {
-      ParsingError::UnexpectedToken(message) => format!("unexpected token - {}", message),
-      ParsingError::IntegerConversionError(string) => format!("could not parse {} to i64", string),
-      ParsingError::NoPrefixParseFn(token) => {
-        format!("no prefix parse fn for {}", token.type_string())
-      }
-    }
-  }
 }
 
 impl Parser {
@@ -391,9 +372,11 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-  use crate::ast::*;
   use crate::lexer::*;
-  use crate::parser::*;
+  use crate::parser::expr::{Expr, Identifier};
+  use crate::parser::node::{Node, Program};
+  use crate::parser::stmt::Statement;
+  use crate::parser::Parser;
 
   enum Lit<'a> {
     Int(i64),

@@ -1,5 +1,5 @@
-use crate::ast::Node;
-use crate::{lexer::Lexer, parser::Parser};
+use crate::lexer::Lexer;
+use crate::parser::*;
 use std::io::{BufRead, Stdin, Stdout, Write};
 
 pub fn start(stdin: Stdin, mut stdout: Stdout) {
@@ -11,7 +11,7 @@ pub fn start(stdin: Stdin, mut stdout: Stdout) {
     let lexer = Lexer::new(line);
     let mut parser = Parser::new(lexer);
     for statement in parser.parse_program() {
-      println!("{:?}", statement.string());
+      println!("{:?}", statement);
     }
     print!(">> ");
     stdout.flush().unwrap();

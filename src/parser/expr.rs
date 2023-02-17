@@ -1,23 +1,6 @@
+use crate::parser::node::Node;
+use crate::parser::stmt::Statement;
 use crate::token::*;
-
-pub type Program = Vec<Statement>;
-
-impl Node for Program {
-  fn token_literal(&self) -> String {
-    match self.first() {
-      Some(stmt) => stmt.token_literal(),
-      None => "".to_string(),
-    }
-  }
-
-  fn string(&self) -> String {
-    let mut string = String::new();
-    for statement in self {
-      string.push_str(&statement.string());
-    }
-    return string;
-  }
-}
 
 #[derive(Clone, Debug)]
 pub struct IfExpression {
@@ -34,6 +17,59 @@ pub struct FunctionLiteral {
   pub body: BlockStatement,
 }
 
+impl Node for FunctionLiteral {
+  fn token_literal(&self) -> String {
+    self.token.literal()
+  }
+
+  fn string(&self) -> String {
+    format!(
+      "{} ({}) {}",
+      self.token.literal(),
+      self
+        .parameters
+        .iter()
+        .map(|p| p.string())
+        .collect::<Vec<_>>()
+        .join(", "),
+      self.body.string()
+    )
+  }
+}
+
+#[derive(Clone, Debug)]
+pub enum Either<Left, Right> {
+  Left(Left),
+  Right(Right),
+}
+
+impl<Left, Right> Node for Either<Left, Right>
+where
+  Left: Node,
+  Right: Node,
+{
+  fn token_literal(&self) -> String {
+    match self {
+      Either::Left(node) => node.token_literal(),
+      Either::Right(node) => node.token_literal(),
+    }
+  }
+
+  fn string(&self) -> String {
+    match self {
+      Either::Left(node) => node.string(),
+      Either::Right(node) => node.string(),
+    }
+  }
+}
+
+#[derive(Clone, Debug)]
+pub struct CallExpression {
+  pub token: Token,
+  pub function: Either<Identifier, FunctionLiteral>,
+  pub arguments: Vec<Expr>,
+}
+
 #[derive(Clone, Debug)]
 pub enum Expr {
   Ident(Identifier),
@@ -43,6 +79,7 @@ pub enum Expr {
   Infix(Token, Box<Expr>, String, Box<Expr>),
   If(IfExpression),
   Function(FunctionLiteral),
+  Call(CallExpression),
   Todo,
 }
 
@@ -55,7 +92,8 @@ impl Node for Expr {
       Expr::Infix(token, _, _, _) => token.literal(),
       Expr::BooleanLiteral(token, _) => token.literal(),
       Expr::If(if_expr) => if_expr.token.literal(),
-      Expr::Function(fn_literal) => fn_literal.token.literal(),
+      Expr::Function(fn_literal) => fn_literal.token_literal(),
+      Expr::Call(call_expr) => call_expr.token.literal(),
       Expr::Todo => String::from("TODO"),
     }
   }
@@ -69,17 +107,17 @@ impl Node for Expr {
       Expr::Infix(_, lhs, operator, rhs) => {
         format!("({} {} {})", lhs.string(), operator, rhs.string())
       }
-      Expr::Function(fn_literal) => {
+      Expr::Function(fn_literal) => fn_literal.string(),
+      Expr::Call(call_expr) => {
         format!(
-          "{} ({}) {}",
-          fn_literal.token.literal(),
-          fn_literal
-            .parameters
+          "{}({})",
+          call_expr.function.string(),
+          call_expr
+            .arguments
             .iter()
-            .map(|p| p.string())
+            .map(|a| a.string())
             .collect::<Vec<_>>()
-            .join(", "),
-          fn_literal.body.string()
+            .join(", ")
         )
       }
       Expr::If(if_expr) => {
@@ -132,64 +170,5 @@ impl Node for BlockStatement {
       .map(|stmt| stmt.string())
       .collect::<Vec<String>>()
       .join("")
-  }
-}
-
-#[derive(Clone, Debug)]
-pub enum Statement {
-  Let(Token, Identifier, Expr),
-  Return(Token, Expr),
-  Expression(Token, Expr),
-  Block(BlockStatement),
-}
-
-impl Node for Statement {
-  fn token_literal(&self) -> String {
-    match self {
-      Statement::Let(token, _, _) => token.literal(),
-      Statement::Return(token, _) => token.literal(),
-      Statement::Expression(token, _) => token.literal(),
-      Statement::Block(block) => block.token.literal(),
-    }
-  }
-
-  fn string(&self) -> String {
-    match self {
-      Statement::Let(token, name, val) => {
-        format!("{} {} = {};", token.literal(), name.string(), val.string())
-      }
-      Statement::Return(token, value) => {
-        format!("{} {};", token.literal(), value.string())
-      }
-      Statement::Expression(_, expr) => expr.string(),
-      Statement::Block(block_stmt) => block_stmt.string(),
-    }
-  }
-}
-
-pub trait Node {
-  fn token_literal(&self) -> String;
-  fn string(&self) -> String;
-}
-
-#[cfg(test)]
-mod tests {
-  use crate::ast::*;
-
-  #[test]
-  fn token_string() {
-    let program: Program = vec![Statement::Let(
-      Token::Let,
-      Identifier {
-        token: Token::Ident("myVar".to_string()),
-        value: "myVar".to_string(),
-      },
-      Expr::Ident(Identifier {
-        token: Token::Ident("anotherVar".to_string()),
-        value: "anotherVar".to_string(),
-      }),
-    )];
-
-    assert_eq!(program.string(), "let myVar = anotherVar;");
   }
 }

@@ -1,10 +1,16 @@
 use std::io;
 
-mod ast;
 mod lexer;
 mod parser;
 mod repl;
 mod token;
+
+// token
+// lexer
+// parser
+//  -> ast
+//  -> expr
+//  -> statement
 
 fn main() {
   println!("This is the Monkey programming language!");
