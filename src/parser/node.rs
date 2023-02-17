@@ -1,10 +1,27 @@
 use crate::parser::stmt::Statement;
+use crate::token::Token;
 
 pub type Program = Vec<Statement>;
 
 pub trait Node {
   fn token_literal(&self) -> String;
   fn string(&self) -> String;
+}
+
+pub trait TokenNode {
+  fn token(&self) -> &Token;
+}
+
+impl<T> Node for T
+where
+  T: TokenNode,
+{
+  fn token_literal(&self) -> String {
+    self.token().literal()
+  }
+  fn string(&self) -> String {
+    self.token_literal()
+  }
 }
 
 impl Node for Program {

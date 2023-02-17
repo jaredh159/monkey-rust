@@ -121,11 +121,11 @@ impl Parser {
     let initial_token = self.cur_token.clone();
     self.advance();
     self.parse_expression(Precedence::Prefix).map(|expr| {
-      Expr::Prefix(
-        initial_token.clone(),
-        initial_token.literal(),
-        Box::new(expr),
-      )
+      Expr::Prefix(PrefixExpression {
+        token: initial_token.clone(),
+        operator: initial_token.literal(),
+        rhs: Box::new(expr),
+      })
     })
   }
 
@@ -134,12 +134,12 @@ impl Parser {
     let precedence = operator_token.precedence();
     self.advance();
     self.parse_expression(precedence).map(|right| {
-      Expr::Infix(
-        operator_token.clone(),
-        Box::new(left),
-        operator_token.literal(),
-        Box::new(right),
-      )
+      Expr::Infix(InfixExpression {
+        token: operator_token.clone(),
+        lhs: Box::new(left),
+        operator: operator_token.literal(),
+        rhs: Box::new(right),
+      })
     })
   }
 
@@ -208,10 +208,10 @@ impl Parser {
   }
 
   fn parse_boolean_literal(&mut self) -> Option<Expr> {
-    Some(Expr::BooleanLiteral(
-      self.cur_token.clone(),
-      self.cur_token == Token::True,
-    ))
+    Some(Expr::Bool(BooleanLiteral {
+      token: self.cur_token.clone(),
+      value: self.cur_token == Token::True,
+    }))
   }
 
   fn parse_integer_literal(&mut self) -> Option<Expr> {
@@ -220,7 +220,12 @@ impl Parser {
       .literal()
       .parse::<i64>()
       .ok()
-      .map(|value| Expr::IntegerLiteral(self.cur_token.clone(), value))
+      .map(|value| {
+        Expr::Int(IntegerLiteral {
+          token: self.cur_token.clone(),
+          value,
+        })
+      })
       .or_else(|| {
         self.errors.push(ParsingError::IntegerConversionError(
           self.cur_token.literal(),
@@ -253,7 +258,7 @@ impl Parser {
       return None;
     }
 
-    Some(Expr::Function(FunctionLiteral {
+    Some(Expr::Func(FunctionLiteral {
       token,
       parameters,
       body: self.parse_block_statement(),
@@ -454,9 +459,9 @@ mod tests {
     for (input, expected_operator, expected_value) in cases {
       let program = assert_program(input, 1);
       let expr = assert_expression_statement(&program[0]);
-      if let Expr::Prefix(_, operator, expr) = expr {
-        assert_eq!(operator, expected_operator);
-        assert_literal(expr, expected_value);
+      if let Expr::Prefix(prefix) = expr {
+        assert_eq!(prefix.operator, expected_operator);
+        assert_literal(&prefix.rhs, expected_value);
       } else {
         assert!(false, "expression not a prefix, got {:?}", expr);
       }
@@ -563,7 +568,7 @@ mod tests {
   fn test_function_literal() {
     let program = assert_program("fn(x, y) { x + y ; }", 1);
     let expr = assert_expression_statement(&program[0]);
-    if let Expr::Function(fn_lit) = expr {
+    if let Expr::Func(fn_lit) = expr {
       assert_eq!(fn_lit.parameters.len(), 2);
       assert_eq!(fn_lit.parameters[0].value, "x");
       assert_eq!(fn_lit.parameters[1].value, "y");
@@ -585,7 +590,7 @@ mod tests {
     for (input, expected) in cases {
       let program = assert_program(input, 1);
       let expr = assert_expression_statement(&program[0]);
-      if let Expr::Function(fn_lit) = expr {
+      if let Expr::Func(fn_lit) = expr {
         assert_eq!(fn_lit.parameters.len(), expected.len());
         for (param, expected_ident) in fn_lit.parameters.iter().zip(expected) {
           assert_eq!(param.value, expected_ident);
@@ -621,18 +626,18 @@ mod tests {
   }
 
   fn assert_boolean_literal(expr: &Expr, expected_value: bool) {
-    if let Expr::BooleanLiteral(token, value) = expr {
-      assert_eq!(format!("{}", expected_value), token.literal());
-      assert_eq!(*value, expected_value);
+    if let Expr::Bool(bool_lit) = expr {
+      assert_eq!(format!("{}", expected_value), bool_lit.token.literal());
+      assert_eq!(bool_lit.value, expected_value);
     } else {
       panic!("expression not a boolean literal, got {:?}", expr);
     }
   }
 
   fn assert_integer_literal(expr: &Expr, expected_value: i64) {
-    if let Expr::IntegerLiteral(token, value) = expr {
-      assert_eq!(expected_value.to_string(), token.literal());
-      assert_eq!(expected_value, *value);
+    if let Expr::Int(int) = expr {
+      assert_eq!(expected_value.to_string(), int.token_literal());
+      assert_eq!(expected_value, int.value);
     } else {
       assert!(false, "expression not an integer literal, got {:?}", expr);
     }
@@ -644,10 +649,10 @@ mod tests {
     expected_operator: &str,
     expected_rhs: Lit<'a>,
   ) {
-    if let Expr::Infix(_, lhs, operator, rhs) = expr {
-      assert_literal(lhs, expected_lhs);
-      assert_eq!(operator, expected_operator);
-      assert_literal(rhs, expected_rhs);
+    if let Expr::Infix(infix) = expr {
+      assert_literal(&infix.lhs, expected_lhs);
+      assert_eq!(infix.operator, expected_operator);
+      assert_literal(&infix.rhs, expected_rhs);
     } else {
       assert!(false, "expression not a infix, got {:?}", expr);
     }

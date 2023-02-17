@@ -1,6 +1,76 @@
-use crate::parser::node::Node;
+use crate::parser::node::{Node, TokenNode};
 use crate::parser::stmt::Statement;
 use crate::token::*;
+
+#[derive(Clone, Debug)]
+pub enum Expr {
+  Bool(BooleanLiteral),
+  Call(CallExpression),
+  Func(FunctionLiteral),
+  Ident(Identifier),
+  If(IfExpression),
+  Infix(InfixExpression),
+  Int(IntegerLiteral),
+  Prefix(PrefixExpression),
+  Todo,
+}
+
+// Bool
+
+#[derive(Clone, Debug)]
+pub struct BooleanLiteral {
+  pub token: Token,
+  pub value: bool,
+}
+
+impl TokenNode for BooleanLiteral {
+  fn token(&self) -> &Token {
+    &self.token
+  }
+}
+
+// CallExpression
+
+#[derive(Clone, Debug)]
+pub struct CallExpression {
+  pub token: Token,
+  pub function: Either<Identifier, FunctionLiteral>,
+  pub arguments: Vec<Expr>,
+}
+
+impl Node for CallExpression {
+  fn token_literal(&self) -> String {
+    self.token.literal()
+  }
+  fn string(&self) -> String {
+    format!(
+      "{}({})",
+      self.function.string(),
+      self
+        .arguments
+        .iter()
+        .map(|a| a.string())
+        .collect::<Vec<_>>()
+        .join(", ")
+    )
+  }
+}
+
+// Identifier
+
+#[derive(Clone, Debug)]
+pub struct Identifier {
+  pub token: Token,
+  pub value: String,
+}
+
+impl TokenNode for Identifier {
+  fn token(&self) -> &Token {
+    &self.token
+  }
+}
+
+// IfExpression
 
 #[derive(Clone, Debug)]
 pub struct IfExpression {
@@ -9,6 +79,63 @@ pub struct IfExpression {
   pub consequence: BlockStatement,
   pub alternative: Option<BlockStatement>,
 }
+
+impl Node for IfExpression {
+  fn token_literal(&self) -> String {
+    self.token.literal()
+  }
+  fn string(&self) -> String {
+    let mut string = format!(
+      "if {} {}",
+      self.condition.string(),
+      self.consequence.string()
+    );
+    if let Some(alternative) = &self.alternative {
+      string.push_str(&format!("else {}", alternative.string()));
+    }
+    string
+  }
+}
+
+// InfixExpression
+
+#[derive(Clone, Debug)]
+pub struct InfixExpression {
+  pub token: Token,
+  pub lhs: Box<Expr>,
+  pub operator: String,
+  pub rhs: Box<Expr>,
+}
+
+impl Node for InfixExpression {
+  fn token_literal(&self) -> String {
+    self.token.literal()
+  }
+  fn string(&self) -> String {
+    format!(
+      "({} {} {})",
+      self.lhs.string(),
+      self.operator,
+      self.rhs.string()
+    )
+  }
+}
+
+// IntegerLiteral
+
+#[derive(Clone, Debug)]
+pub struct IntegerLiteral {
+  pub token: Token,
+  pub value: i64,
+}
+
+impl TokenNode for IntegerLiteral {
+  fn token(&self) -> &Token {
+    &self.token
+  }
+}
+
+// FunctionLiteral
 
 #[derive(Clone, Debug)]
 pub struct FunctionLiteral {
@@ -37,6 +164,49 @@ impl Node for FunctionLiteral {
   }
 }
 
+// PrefixExpression
+
+#[derive(Clone, Debug)]
+pub struct PrefixExpression {
+  pub token: Token,
+  pub operator: String,
+  pub rhs: Box<Expr>,
+}
+
+impl Node for PrefixExpression {
+  fn token_literal(&self) -> String {
+    self.token.literal()
+  }
+  fn string(&self) -> String {
+    format!("({}{})", self.operator, self.rhs.string())
+  }
+}
+
+// BlockStatement
+
+#[derive(Clone, Debug)]
+pub struct BlockStatement {
+  pub token: Token,
+  pub statements: Vec<Statement>,
+}
+
+impl Node for BlockStatement {
+  fn token_literal(&self) -> String {
+    self.token.literal()
+  }
+
+  fn string(&self) -> String {
+    self
+      .statements
+      .iter()
+      .map(|stmt| stmt.string())
+      .collect::<Vec<String>>()
+      .join("")
+  }
+}
+
+// Either
+
 #[derive(Clone, Debug)]
 pub enum Either<Left, Right> {
   Left(Left),
@@ -63,37 +233,17 @@ where
   }
 }
 
-#[derive(Clone, Debug)]
-pub struct CallExpression {
-  pub token: Token,
-  pub function: Either<Identifier, FunctionLiteral>,
-  pub arguments: Vec<Expr>,
-}
-
-#[derive(Clone, Debug)]
-pub enum Expr {
-  Ident(Identifier),
-  IntegerLiteral(Token, i64),
-  BooleanLiteral(Token, bool),
-  Prefix(Token, String, Box<Expr>),
-  Infix(Token, Box<Expr>, String, Box<Expr>),
-  If(IfExpression),
-  Function(FunctionLiteral),
-  Call(CallExpression),
-  Todo,
-}
-
 impl Node for Expr {
   fn token_literal(&self) -> String {
     match self {
       Expr::Ident(ident) => ident.token.literal(),
-      Expr::IntegerLiteral(token, _) => token.literal(),
-      Expr::Prefix(token, _, _) => token.literal(),
-      Expr::Infix(token, _, _, _) => token.literal(),
-      Expr::BooleanLiteral(token, _) => token.literal(),
+      Expr::Int(int) => int.token_literal(),
+      Expr::Prefix(prefix) => prefix.token_literal(),
+      Expr::Infix(infix) => infix.token_literal(),
+      Expr::Bool(bool_lit) => bool_lit.token_literal(),
       Expr::If(if_expr) => if_expr.token.literal(),
-      Expr::Function(fn_literal) => fn_literal.token_literal(),
-      Expr::Call(call_expr) => call_expr.token.literal(),
+      Expr::Func(fn_literal) => fn_literal.token_literal(),
+      Expr::Call(call_expr) => call_expr.token_literal(),
       Expr::Todo => String::from("TODO"),
     }
   }
@@ -101,74 +251,14 @@ impl Node for Expr {
   fn string(&self) -> String {
     match self {
       Expr::Ident(ident) => ident.string(),
-      Expr::IntegerLiteral(token, _) => token.literal(),
-      Expr::BooleanLiteral(token, _) => token.literal(),
-      Expr::Prefix(_, operator, expr) => format!("({}{})", operator, expr.string()),
-      Expr::Infix(_, lhs, operator, rhs) => {
-        format!("({} {} {})", lhs.string(), operator, rhs.string())
-      }
-      Expr::Function(fn_literal) => fn_literal.string(),
-      Expr::Call(call_expr) => {
-        format!(
-          "{}({})",
-          call_expr.function.string(),
-          call_expr
-            .arguments
-            .iter()
-            .map(|a| a.string())
-            .collect::<Vec<_>>()
-            .join(", ")
-        )
-      }
-      Expr::If(if_expr) => {
-        let mut string = format!(
-          "if {} {}",
-          if_expr.condition.string(),
-          if_expr.consequence.string()
-        );
-        if let Some(alternative) = &if_expr.alternative {
-          string.push_str(&format!("else {}", alternative.string()));
-        }
-        string
-      }
+      Expr::Int(int) => int.string(),
+      Expr::Bool(bool_lit) => bool_lit.string(),
+      Expr::Prefix(prefix) => prefix.string(),
+      Expr::Infix(infix) => infix.string(),
+      Expr::Func(fn_literal) => fn_literal.string(),
+      Expr::Call(call_expr) => call_expr.string(),
+      Expr::If(if_expr) => if_expr.string(),
       Expr::Todo => String::from("TODO"),
     }
-  }
-}
-
-#[derive(Clone, Debug)]
-pub struct Identifier {
-  pub token: Token,
-  pub value: String,
-}
-
-impl Node for Identifier {
-  fn token_literal(&self) -> String {
-    self.token.literal()
-  }
-
-  fn string(&self) -> String {
-    self.value.clone()
-  }
-}
-
-#[derive(Clone, Debug)]
-pub struct BlockStatement {
-  pub token: Token,
-  pub statements: Vec<Statement>,
-}
-
-impl Node for BlockStatement {
-  fn token_literal(&self) -> String {
-    self.token.literal()
-  }
-
-  fn string(&self) -> String {
-    self
-      .statements
-      .iter()
-      .map(|stmt| stmt.string())
-      .collect::<Vec<String>>()
-      .join("")
   }
 }
