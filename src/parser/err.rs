@@ -6,7 +6,6 @@ pub enum ParsingError {
   NoPrefixParseFn(Token),
 }
 
-#[cfg(test)]
 impl ParsingError {
   pub fn message(&self) -> String {
     match self {
