@@ -373,12 +373,16 @@ impl Parser {
     let return_token = self.cur_token.clone();
     self.advance();
 
-    // TODO: skip over expression for now
-    while !self.cur_token.same_variant(&Token::Semicolon) {
+    let return_value = match self.parse_expression(Precedence::Lowest) {
+      Some(expr) => expr,
+      None => return None,
+    };
+
+    if self.peek_token == Token::Semicolon {
       self.advance();
     }
 
-    Some(Statement::Return(return_token, Expr::Todo))
+    Some(Statement::Return(return_token, return_value))
   }
 
   fn parse_let_statement(&mut self) -> Option<Statement> {
@@ -397,12 +401,17 @@ impl Parser {
       return None;
     }
 
-    // TODO: skip over expression for now
-    while !self.cur_token.same_variant(&Token::Semicolon) {
+    self.advance();
+    let value = match self.parse_expression(Precedence::Lowest) {
+      Some(expr) => expr,
+      None => return None,
+    };
+
+    if self.peek_token == Token::Semicolon {
       self.advance();
     }
 
-    Some(Statement::Let(let_token, name, Expr::Todo))
+    Some(Statement::Let(let_token, name, value))
   }
 
   fn advance_expecting(&mut self, token: Token) -> bool {
@@ -444,17 +453,16 @@ mod tests {
 
   #[test]
   fn test_let_statements() {
-    let input = r#"
-    let x = 5;
-    let y = 10;
-    let foobar = 838383;
-    "#;
+    let cases = vec![
+      ("let x = 5;", "x", Lit::Int(5)),
+      ("let y = true;", "y", Lit::Bool(true)),
+      ("let foobar = y;", "foobar", Lit::Str("y")),
+    ];
 
-    let program = assert_program(input, 3);
-
-    let cases = vec!["x", "y", "foobar"];
-    for (statement, expected) in program.iter().zip(cases.iter()) {
-      test_let_statement(statement, expected);
+    for (input, expected_ident, expected_value) in cases {
+      let program = assert_program(input, 1);
+      let expr = assert_let_statement(&program[0], expected_ident);
+      assert_literal(&expr, expected_value);
     }
   }
 
@@ -465,6 +473,22 @@ mod tests {
     return 10;
     return 993322;
     "#;
+
+    let cases = vec![
+      ("return 5;", Lit::Int(5)),
+      ("return true;", Lit::Bool(true)),
+      ("return foobar;", Lit::Str("foobar")),
+    ];
+
+    for (input, expected_expr) in cases {
+      let program = assert_program(input, 1);
+      if let Statement::Return(token, expr) = &program[0] {
+        assert_eq!(token.literal(), "return");
+        assert_literal(&expr, expected_expr);
+      } else {
+        panic!("expected return statement, got {:?}", program[0]);
+      }
+    }
 
     let program = assert_program(input, 3);
     for statement in program {
@@ -778,12 +802,13 @@ mod tests {
     program
   }
 
-  fn test_let_statement(statement: &Statement, expected_ident: &str) {
-    if let Statement::Let(_, ident, _) = statement {
+  fn assert_let_statement(statement: &Statement, expected_ident: &str) -> Expr {
+    if let Statement::Let(_, ident, expr) = statement {
       assert_eq!(ident.value, expected_ident);
       assert_eq!(ident.token_literal(), expected_ident);
+      return expr.clone();
     } else {
-      assert!(false, "expected let statement, got {:?}", statement);
+      panic!("expected let statement, got {:?}", statement);
     }
   }
 

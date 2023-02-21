@@ -12,7 +12,6 @@ pub enum Expr {
   Infix(InfixExpression),
   Int(IntegerLiteral),
   Prefix(PrefixExpression),
-  Todo,
 }
 
 // Bool
@@ -244,7 +243,6 @@ impl Node for Expr {
       Expr::If(if_expr) => if_expr.token.literal(),
       Expr::Func(fn_literal) => fn_literal.token_literal(),
       Expr::Call(call_expr) => call_expr.token_literal(),
-      Expr::Todo => String::from("TODO"),
     }
   }
 
@@ -258,7 +256,6 @@ impl Node for Expr {
       Expr::Func(fn_literal) => fn_literal.string(),
       Expr::Call(call_expr) => call_expr.string(),
       Expr::If(if_expr) => if_expr.string(),
-      Expr::Todo => String::from("TODO"),
     }
   }
 }
