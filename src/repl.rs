@@ -1,6 +1,6 @@
 use crate::lexer::Lexer;
-use crate::parser::Node;
 use crate::parser::*;
+use crate::{eval::eval, eval::Node, object::Object};
 use std::io::{BufRead, Stdin, Stdout, Write};
 
 pub fn start(stdin: Stdin, mut stdout: Stdout) {
@@ -18,7 +18,7 @@ pub fn start(stdin: Stdin, mut stdout: Stdout) {
       }
       continue;
     }
-    println!("{}", program.string());
+    println!("{}", eval(Node::Prog(program)).inspect());
     print!(">> ");
     stdout.flush().unwrap();
   }
