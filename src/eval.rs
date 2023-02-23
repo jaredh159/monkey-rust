@@ -15,14 +15,41 @@ pub fn eval(node: Node) -> Obj {
     Node::Stmt(Statement::Let(_, _, _)) => todo!(),
     Node::Stmt(Statement::Return(_, _)) => todo!(),
     Node::Stmt(Statement::Block(_)) => todo!(),
-    Node::Expr(Expr::Bool(b)) => Obj::Bool(Boolean { value: b.value }),
+    Node::Expr(Expr::Bool(boolean)) => Obj::bool(boolean.value),
     Node::Expr(Expr::Call(_)) => todo!(),
     Node::Expr(Expr::Func(_)) => todo!(),
     Node::Expr(Expr::Ident(_)) => todo!(),
     Node::Expr(Expr::If(_)) => todo!(),
-    Node::Expr(Expr::Infix(_)) => todo!(),
-    Node::Expr(Expr::Int(i)) => Obj::Int(Integer { value: i.value }),
+    Node::Expr(Expr::Int(int)) => Obj::int(int.value),
     Node::Expr(Expr::Prefix(p)) => eval_prefix_expr(&p.operator, eval(Node::Expr(*p.rhs))),
+    Node::Expr(Expr::Infix(infix)) => eval_infix_expr(
+      eval(Node::Expr(*infix.lhs)),
+      infix.operator,
+      eval(Node::Expr(*infix.rhs)),
+    ),
+  }
+}
+
+fn eval_infix_expr(lhs: Obj, operator: String, rhs: Obj) -> Obj {
+  match (lhs, operator.as_ref(), rhs) {
+    (Obj::Int(lhs), _, Obj::Int(rhs)) => eval_integer_infix_expression(lhs, operator, rhs),
+    (Obj::Bool(lhs), "==", Obj::Bool(rhs)) => Obj::bool(lhs.value == rhs.value),
+    (Obj::Bool(lhs), "!=", Obj::Bool(rhs)) => Obj::bool(lhs.value != rhs.value),
+    _ => Obj::Null,
+  }
+}
+
+fn eval_integer_infix_expression(lhs: Integer, operator: String, rhs: Integer) -> Obj {
+  match operator.as_ref() {
+    "+" => Obj::int(lhs.value + rhs.value),
+    "-" => Obj::int(lhs.value - rhs.value),
+    "*" => Obj::int(lhs.value * rhs.value),
+    "/" => Obj::int(lhs.value / rhs.value),
+    "<" => Obj::bool(lhs.value < rhs.value),
+    ">" => Obj::bool(lhs.value > rhs.value),
+    "==" => Obj::bool(lhs.value == rhs.value),
+    "!=" => Obj::bool(lhs.value != rhs.value),
+    _ => Obj::Null,
   }
 }
 
@@ -30,21 +57,21 @@ fn eval_prefix_expr(operator: &str, rhs: Obj) -> Obj {
   match operator {
     "!" => eval_bang_operator_expression(rhs),
     "-" => eval_minus_prefix_operator_expression(rhs),
-    _ => todo!(),
+    _ => Obj::Null,
   }
 }
 
 fn eval_bang_operator_expression(rhs: Obj) -> Obj {
   match rhs {
-    Obj::Bool(b) => Obj::Bool(Boolean { value: !b.value }),
-    Obj::Null => Obj::Bool(Boolean { value: true }),
-    _ => Obj::Bool(Boolean { value: false }),
+    Obj::Bool(b) => Obj::bool(!b.value),
+    Obj::Null => Obj::bool(true),
+    _ => Obj::bool(false),
   }
 }
 
 fn eval_minus_prefix_operator_expression(rhs: Obj) -> Obj {
   match rhs {
-    Obj::Int(int) => Obj::Int(Integer { value: -int.value }),
+    Obj::Int(int) => Obj::int(-int.value),
     _ => Obj::Null,
   }
 }
@@ -67,7 +94,23 @@ mod tests {
 
   #[test]
   fn test_eval_integer_expression() {
-    let cases = vec![("-5", -5), ("-10", -10), ("5", 5), ("10", 10)];
+    let cases = vec![
+      ("-5", -5),
+      ("-10", -10),
+      ("5", 5),
+      ("10", 10),
+      ("5 + 5 + 5 + 5 - 10", 10),
+      ("2 * 2 * 2 * 2 * 2", 32),
+      ("-50 + 100 + -50", 0),
+      ("5 * 2 + 10", 20),
+      ("5 + 2 * 10", 25),
+      ("20 + 2 * -10", 0),
+      ("50 / 2 * 2 + 10", 60),
+      ("2 * (5 + 10)", 30),
+      ("3 * 3 * 3 + 10", 37),
+      ("3 * (3 * 3) + 10", 37),
+      ("(5 + 10 * 2 + 15 / 3) * 2 + -10", 50),
+    ];
     for (input, expected) in cases {
       let evaluated = test_eval(input);
       assert_integer_object(evaluated, expected);
@@ -76,7 +119,27 @@ mod tests {
 
   #[test]
   fn test_eval_boolean_expression() {
-    let cases = vec![("true", true), ("false", false)];
+    let cases = vec![
+      ("true", true),
+      ("false", false),
+      ("1 < 2", true),
+      ("1 > 2", false),
+      ("1 < 1", false),
+      ("1 > 1", false),
+      ("1 == 1", true),
+      ("1 != 1", false),
+      ("1 == 2", false),
+      ("1 != 2", true),
+      ("true == true", true),
+      ("false == false", true),
+      ("true == false", false),
+      ("true != false", true),
+      ("false != true", true),
+      ("(1 < 2) == true", true),
+      ("(1 < 2) == false", false),
+      ("(1 > 2) == true", false),
+      ("(1 > 2) == false", true),
+    ];
     for (input, expected) in cases {
       let evaluated = test_eval(input);
       assert_boolean_object(evaluated, expected);

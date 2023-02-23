@@ -31,6 +31,15 @@ impl Object for Boolean {
   }
 }
 
+impl Obj {
+  pub fn bool(value: bool) -> Obj {
+    Obj::Bool(Boolean { value })
+  }
+  pub fn int(value: i64) -> Obj {
+    Obj::Int(Integer { value })
+  }
+}
+
 impl Object for Obj {
   fn inspect(&self) -> String {
     match self {
