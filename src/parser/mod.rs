@@ -5,7 +5,7 @@ mod parser;
 mod stmt;
 
 pub use err::ParsingError;
-pub use expr::Expr;
+pub use expr::*;
 pub use node::Node;
 pub use node::Program;
 pub use parser::*;
