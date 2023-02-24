@@ -1,5 +1,5 @@
-use crate::object::{Integer, Obj};
-use crate::parser::{Expr, IfExpression, Program, Statement};
+use crate::object::{Integer, Obj, ReturnValue};
+use crate::parser::{BlockStatement, Expr, IfExpression, Program, Statement};
 
 pub enum Node {
   Prog(Program),
@@ -9,11 +9,13 @@ pub enum Node {
 
 pub fn eval(node: Node) -> Obj {
   match node {
-    Node::Prog(program) => eval_statements(program),
+    Node::Prog(program) => eval_program(program),
     Node::Stmt(Statement::Expression(_, expr)) => eval(Node::Expr(expr)),
     Node::Stmt(Statement::Let(_, _, _)) => todo!(),
-    Node::Stmt(Statement::Return(_, _)) => todo!(),
-    Node::Stmt(Statement::Block(block)) => eval_statements(block.statements),
+    Node::Stmt(Statement::Return(_, expr)) => Obj::Return(Box::new(ReturnValue {
+      value: eval(Node::Expr(expr)),
+    })),
+    Node::Stmt(Statement::Block(block)) => eval_block_statement(block),
     Node::Expr(Expr::Bool(boolean)) => Obj::bool(boolean.value),
     Node::Expr(Expr::Call(_)) => todo!(),
     Node::Expr(Expr::Func(_)) => todo!(),
@@ -86,10 +88,24 @@ fn eval_if_expression(if_expr: IfExpression) -> Obj {
   }
 }
 
-fn eval_statements(stmts: Vec<Statement>) -> Obj {
+fn eval_program(program: Program) -> Obj {
   let mut result = Obj::Null;
-  for stmt in stmts {
+  for stmt in program {
     result = eval(Node::Stmt(stmt));
+    if let Obj::Return(return_value) = &result {
+      return return_value.value.clone();
+    }
+  }
+  result
+}
+
+fn eval_block_statement(block: BlockStatement) -> Obj {
+  let mut result = Obj::Null;
+  for stmt in block.statements {
+    result = eval(Node::Stmt(stmt));
+    if let Obj::Return(_) = &result {
+      return result;
+    }
   }
   result
 }
@@ -101,6 +117,21 @@ mod tests {
   use super::*;
   use crate::lexer::Lexer;
   use crate::parser::Parser;
+
+  #[test]
+  fn test_return_statements() {
+    let cases = vec![
+      ("return 10;", 10),
+      ("return 10; 9;", 10),
+      ("return 2 * 5; 9;", 10),
+      ("9; return 2 * 5; 9;", 10),
+      ("if (10 > 1) { if ( 10 > 1) { return 10; } return 1; }", 10),
+    ];
+    for (input, expected) in cases {
+      let evaluated = test_eval(input);
+      assert_integer_object(evaluated, expected);
+    }
+  }
 
   #[test]
   fn test_if_else_expressions() {

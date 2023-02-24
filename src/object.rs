@@ -2,6 +2,7 @@
 pub enum Obj {
   Int(Integer),
   Bool(Boolean),
+  Return(Box<ReturnValue>),
   Null,
 }
 
@@ -31,6 +32,17 @@ impl Object for Boolean {
   }
 }
 
+#[derive(Clone, Debug)]
+pub struct ReturnValue {
+  pub value: Obj,
+}
+
+impl Object for ReturnValue {
+  fn inspect(&self) -> String {
+    self.value.inspect()
+  }
+}
+
 impl Obj {
   pub fn bool(value: bool) -> Obj {
     Obj::Bool(Boolean { value })
@@ -52,6 +64,7 @@ impl Object for Obj {
     match self {
       Obj::Int(int) => int.inspect(),
       Obj::Bool(boolean) => boolean.inspect(),
+      Obj::Return(return_value) => return_value.inspect(),
       Obj::Null => "null".to_string(),
     }
   }
