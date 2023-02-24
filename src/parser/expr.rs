@@ -1,5 +1,5 @@
 use crate::parser::node::{Node, TokenNode};
-use crate::parser::stmt::Statement;
+use crate::parser::stmt::BlockStatement;
 use crate::token::*;
 
 #[derive(Clone, Debug)]
@@ -178,29 +178,6 @@ impl Node for PrefixExpression {
   }
   fn string(&self) -> String {
     format!("({}{})", self.operator, self.rhs.string())
-  }
-}
-
-// BlockStatement
-
-#[derive(Clone, Debug)]
-pub struct BlockStatement {
-  pub token: Token,
-  pub statements: Vec<Statement>,
-}
-
-impl Node for BlockStatement {
-  fn token_literal(&self) -> String {
-    self.token.literal()
-  }
-
-  fn string(&self) -> String {
-    self
-      .statements
-      .iter()
-      .map(|stmt| stmt.string())
-      .collect::<Vec<String>>()
-      .join("")
   }
 }
 

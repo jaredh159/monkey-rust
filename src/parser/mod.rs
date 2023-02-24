@@ -9,4 +9,4 @@ pub use expr::*;
 pub use node::Node;
 pub use node::Program;
 pub use parser::*;
-pub use stmt::Statement;
+pub use stmt::*;

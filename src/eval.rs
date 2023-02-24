@@ -1,6 +1,5 @@
-use crate::object::{Boolean, Integer, Obj};
-use crate::parser::PrefixExpression;
-use crate::parser::{Expr, Program, Statement};
+use crate::object::{Integer, Obj};
+use crate::parser::{Expr, IfExpression, Program, Statement};
 
 pub enum Node {
   Prog(Program),
@@ -14,12 +13,12 @@ pub fn eval(node: Node) -> Obj {
     Node::Stmt(Statement::Expression(_, expr)) => eval(Node::Expr(expr)),
     Node::Stmt(Statement::Let(_, _, _)) => todo!(),
     Node::Stmt(Statement::Return(_, _)) => todo!(),
-    Node::Stmt(Statement::Block(_)) => todo!(),
+    Node::Stmt(Statement::Block(block)) => eval_statements(block.statements),
     Node::Expr(Expr::Bool(boolean)) => Obj::bool(boolean.value),
     Node::Expr(Expr::Call(_)) => todo!(),
     Node::Expr(Expr::Func(_)) => todo!(),
     Node::Expr(Expr::Ident(_)) => todo!(),
-    Node::Expr(Expr::If(_)) => todo!(),
+    Node::Expr(Expr::If(if_expr)) => eval_if_expression(if_expr),
     Node::Expr(Expr::Int(int)) => Obj::int(int.value),
     Node::Expr(Expr::Prefix(p)) => eval_prefix_expr(&p.operator, eval(Node::Expr(*p.rhs))),
     Node::Expr(Expr::Infix(infix)) => eval_infix_expr(
@@ -76,6 +75,17 @@ fn eval_minus_prefix_operator_expression(rhs: Obj) -> Obj {
   }
 }
 
+fn eval_if_expression(if_expr: IfExpression) -> Obj {
+  let condition = eval(Node::Expr(*if_expr.condition));
+  if condition.is_truthy() {
+    eval(Node::Stmt(Statement::Block(if_expr.consequence)))
+  } else if if_expr.alternative.is_some() {
+    eval(Node::Stmt(Statement::Block(if_expr.alternative.unwrap())))
+  } else {
+    Obj::Null
+  }
+}
+
 fn eval_statements(stmts: Vec<Statement>) -> Obj {
   let mut result = Obj::Null;
   for stmt in stmts {
@@ -91,6 +101,30 @@ mod tests {
   use super::*;
   use crate::lexer::Lexer;
   use crate::parser::Parser;
+
+  #[test]
+  fn test_if_else_expressions() {
+    let cases = vec![
+      ("if (true) { 10 }", Obj::int(10)),
+      ("if (false) { 10 }", Obj::Null),
+      ("if (1) { 10 }", Obj::int(10)),
+      ("if (1 < 2) { 10 }", Obj::int(10)),
+      ("if (1 > 2) { 10 }", Obj::Null),
+      ("if (1 > 2) { 10 } else { 20 }", Obj::int(20)),
+      ("if (1 < 2) { 10 } else { 20 }", Obj::int(10)),
+    ];
+    for (input, expected) in cases {
+      let evaluated = test_eval(input);
+      match (&evaluated, &expected) {
+        (_, Obj::Int(int)) => assert_integer_object(evaluated, int.value),
+        (Obj::Null, Obj::Null) => assert!(true),
+        _ => panic!(
+          "unexpected types - evaluated: {:?} expected: {:?}",
+          evaluated, expected
+        ),
+      }
+    }
+  }
 
   #[test]
   fn test_eval_integer_expression() {

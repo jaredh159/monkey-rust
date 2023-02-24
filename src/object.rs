@@ -38,6 +38,13 @@ impl Obj {
   pub fn int(value: i64) -> Obj {
     Obj::Int(Integer { value })
   }
+  pub fn is_truthy(&self) -> bool {
+    match self {
+      Obj::Null => false,
+      Obj::Bool(b) => b.value,
+      _ => true,
+    }
+  }
 }
 
 impl Object for Obj {

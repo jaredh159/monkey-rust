@@ -1,4 +1,4 @@
-use crate::parser::expr::{BlockStatement, Expr, Identifier};
+use crate::parser::expr::{Expr, Identifier};
 use crate::parser::node::Node;
 use crate::token::Token;
 
@@ -31,5 +31,28 @@ impl Node for Statement {
       Statement::Expression(_, expr) => expr.string(),
       Statement::Block(block_stmt) => block_stmt.string(),
     }
+  }
+}
+
+// BlockStatement
+
+#[derive(Clone, Debug)]
+pub struct BlockStatement {
+  pub token: Token,
+  pub statements: Vec<Statement>,
+}
+
+impl Node for BlockStatement {
+  fn token_literal(&self) -> String {
+    self.token.literal()
+  }
+
+  fn string(&self) -> String {
+    self
+      .statements
+      .iter()
+      .map(|stmt| stmt.string())
+      .collect::<Vec<String>>()
+      .join("")
   }
 }

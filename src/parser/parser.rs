@@ -1,4 +1,5 @@
-use crate::parser::{err::ParsingError, node::Program, stmt::Statement};
+use crate::parser::stmt::{BlockStatement, Statement};
+use crate::parser::{err::ParsingError, node::Program};
 use crate::token::Token;
 use crate::{lexer::Lexer, parser::expr::*};
 use std::mem;
