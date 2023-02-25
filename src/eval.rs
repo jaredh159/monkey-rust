@@ -7,14 +7,26 @@ pub enum Node {
   Expr(Expr),
 }
 
+impl Node {
+  fn eval_map<F>(self, f: F) -> Obj
+  where
+    F: FnOnce(Obj) -> Obj,
+  {
+    match eval(self) {
+      Obj::Err(err) => Obj::Err(err),
+      obj => f(obj),
+    }
+  }
+}
+
 pub fn eval(node: Node) -> Obj {
   match node {
     Node::Prog(program) => eval_program(program),
     Node::Stmt(Statement::Expression(_, expr)) => eval(Node::Expr(expr)),
     Node::Stmt(Statement::Let(_, _, _)) => todo!(),
-    Node::Stmt(Statement::Return(_, expr)) => Obj::Return(Box::new(ReturnValue {
-      value: eval(Node::Expr(expr)),
-    })),
+    Node::Stmt(Statement::Return(_, expr)) => {
+      Node::Expr(expr).eval_map(|value| Obj::Return(Box::new(ReturnValue { value })))
+    }
     Node::Stmt(Statement::Block(block)) => eval_block_statement(block),
     Node::Expr(Expr::Bool(boolean)) => Obj::bool(boolean.value),
     Node::Expr(Expr::Call(_)) => todo!(),
@@ -22,12 +34,12 @@ pub fn eval(node: Node) -> Obj {
     Node::Expr(Expr::Ident(_)) => todo!(),
     Node::Expr(Expr::If(if_expr)) => eval_if_expression(if_expr),
     Node::Expr(Expr::Int(int)) => Obj::int(int.value),
-    Node::Expr(Expr::Prefix(p)) => eval_prefix_expr(&p.operator, eval(Node::Expr(*p.rhs))),
-    Node::Expr(Expr::Infix(infix)) => eval_infix_expr(
-      eval(Node::Expr(*infix.lhs)),
-      infix.operator,
-      eval(Node::Expr(*infix.rhs)),
-    ),
+    Node::Expr(Expr::Prefix(p)) => {
+      Node::Expr(*p.rhs).eval_map(|rhs| eval_prefix_expr(&p.operator, rhs))
+    }
+    Node::Expr(Expr::Infix(infix)) => Node::Expr(*infix.lhs).eval_map(|lhs| {
+      Node::Expr(*infix.rhs).eval_map(|rhs| eval_infix_expr(lhs, infix.operator, rhs))
+    }),
   }
 }
 
@@ -36,7 +48,23 @@ fn eval_infix_expr(lhs: Obj, operator: String, rhs: Obj) -> Obj {
     (Obj::Int(lhs), _, Obj::Int(rhs)) => eval_integer_infix_expression(lhs, operator, rhs),
     (Obj::Bool(lhs), "==", Obj::Bool(rhs)) => Obj::bool(lhs.value == rhs.value),
     (Obj::Bool(lhs), "!=", Obj::Bool(rhs)) => Obj::bool(lhs.value != rhs.value),
-    _ => Obj::Null,
+    (lhs, operator, rhs) => {
+      if lhs.type_string() != rhs.type_string() {
+        Obj::err(format!(
+          "type mismatch: {} {} {}",
+          lhs.type_string(),
+          operator,
+          rhs.type_string()
+        ))
+      } else {
+        Obj::err(format!(
+          "unknown operator: {} {} {}",
+          lhs.type_string(),
+          operator,
+          rhs.type_string()
+        ))
+      }
+    }
   }
 }
 
@@ -50,7 +78,7 @@ fn eval_integer_infix_expression(lhs: Integer, operator: String, rhs: Integer) -
     ">" => Obj::bool(lhs.value > rhs.value),
     "==" => Obj::bool(lhs.value == rhs.value),
     "!=" => Obj::bool(lhs.value != rhs.value),
-    _ => Obj::Null,
+    op => Obj::err(format!("unknown operator: Obj::Int {} Obj::Int", op)),
   }
 }
 
@@ -73,13 +101,15 @@ fn eval_bang_operator_expression(rhs: Obj) -> Obj {
 fn eval_minus_prefix_operator_expression(rhs: Obj) -> Obj {
   match rhs {
     Obj::Int(int) => Obj::int(-int.value),
-    _ => Obj::Null,
+    rhs => Obj::err(format!("unknown operator: -{}", rhs.type_string())),
   }
 }
 
 fn eval_if_expression(if_expr: IfExpression) -> Obj {
   let condition = eval(Node::Expr(*if_expr.condition));
-  if condition.is_truthy() {
+  if condition.is_err() {
+    condition
+  } else if condition.is_truthy() {
     eval(Node::Stmt(Statement::Block(if_expr.consequence)))
   } else if if_expr.alternative.is_some() {
     eval(Node::Stmt(Statement::Block(if_expr.alternative.unwrap())))
@@ -94,6 +124,8 @@ fn eval_program(program: Program) -> Obj {
     result = eval(Node::Stmt(stmt));
     if let Obj::Return(return_value) = &result {
       return return_value.value.clone();
+    } else if let Obj::Err(_) = &result {
+      return result;
     }
   }
   result
@@ -103,7 +135,7 @@ fn eval_block_statement(block: BlockStatement) -> Obj {
   let mut result = Obj::Null;
   for stmt in block.statements {
     result = eval(Node::Stmt(stmt));
-    if let Obj::Return(_) = &result {
+    if let Obj::Return(_) | Obj::Err(_) = &result {
       return result;
     }
   }
@@ -117,6 +149,44 @@ mod tests {
   use super::*;
   use crate::lexer::Lexer;
   use crate::parser::Parser;
+
+  #[test]
+  fn test_error_handling() {
+    let cases = vec![
+      ("5 + true;", "type mismatch: Obj::Int + Obj::Bool"),
+      ("5 + true; 5;", "type mismatch: Obj::Int + Obj::Bool"),
+      ("-true", "unknown operator: -Obj::Bool"),
+      ("true + false;", "unknown operator: Obj::Bool + Obj::Bool"),
+      (
+        "5; true + false; 5",
+        "unknown operator: Obj::Bool + Obj::Bool",
+      ),
+      (
+        "if (10 > 1) { true + false; }",
+        "unknown operator: Obj::Bool + Obj::Bool",
+      ),
+      (
+        r#"
+        if (10 > 1) {
+          if (10 > 1) {
+            return true + false;
+          }
+
+          return 1;
+        }
+        "#,
+        "unknown operator: Obj::Bool + Obj::Bool",
+      ),
+    ];
+    for (input, expected) in cases {
+      let evaluated = test_eval(input);
+      if let Obj::Err(err) = evaluated {
+        assert_eq!(err.message, expected);
+      } else {
+        panic!("object is not Error. got={:?}", evaluated);
+      }
+    }
+  }
 
   #[test]
   fn test_return_statements() {

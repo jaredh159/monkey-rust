@@ -3,6 +3,7 @@ pub enum Obj {
   Int(Integer),
   Bool(Boolean),
   Return(Box<ReturnValue>),
+  Err(Error),
   Null,
 }
 
@@ -43,12 +44,41 @@ impl Object for ReturnValue {
   }
 }
 
+#[derive(Clone, Debug)]
+pub struct Error {
+  pub message: String,
+}
+
+impl Object for Error {
+  fn inspect(&self) -> String {
+    format!("ERROR: {}", self.message)
+  }
+}
+
 impl Obj {
   pub fn bool(value: bool) -> Obj {
     Obj::Bool(Boolean { value })
   }
   pub fn int(value: i64) -> Obj {
     Obj::Int(Integer { value })
+  }
+  pub fn err(message: String) -> Obj {
+    Obj::Err(Error { message })
+  }
+  pub fn type_string(&self) -> &'static str {
+    match self {
+      Obj::Int(_) => "Obj::Int",
+      Obj::Bool(_) => "Obj::Bool",
+      Obj::Return(_) => "Obj::Return",
+      Obj::Err(_) => "Obj::Err",
+      Obj::Null => "Obj::Null",
+    }
+  }
+  pub fn is_err(&self) -> bool {
+    match self {
+      Obj::Err(_) => true,
+      _ => false,
+    }
   }
   pub fn is_truthy(&self) -> bool {
     match self {
@@ -64,6 +94,7 @@ impl Object for Obj {
     match self {
       Obj::Int(int) => int.inspect(),
       Obj::Bool(boolean) => boolean.inspect(),
+      Obj::Err(err) => err.inspect(),
       Obj::Return(return_value) => return_value.inspect(),
       Obj::Null => "null".to_string(),
     }
