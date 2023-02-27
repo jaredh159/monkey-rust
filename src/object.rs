@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(Clone, Debug)]
 pub enum Obj {
   Int(Integer),
@@ -98,5 +100,25 @@ impl Object for Obj {
       Obj::Return(return_value) => return_value.inspect(),
       Obj::Null => "null".to_string(),
     }
+  }
+}
+
+pub struct Env {
+  pub store: HashMap<String, Obj>,
+}
+
+impl Env {
+  pub fn new() -> Env {
+    Env {
+      store: HashMap::new(),
+    }
+  }
+
+  pub fn get(&self, name: &String) -> Option<&Obj> {
+    self.store.get(name)
+  }
+
+  pub fn set(&mut self, name: String, value: Obj) {
+    self.store.insert(name, value);
   }
 }

@@ -1,11 +1,13 @@
 use crate::lexer::Lexer;
+use crate::object::{Env, Object};
 use crate::parser::*;
-use crate::{eval::eval, eval::Node, object::Object};
+use crate::{eval::eval, eval::Node};
 use std::io::{BufRead, Stdin, Stdout, Write};
 
 pub fn start(stdin: Stdin, mut stdout: Stdout) {
   print!(">> ");
   stdout.flush().unwrap();
+  let mut env = Env::new();
 
   for line in stdin.lock().lines() {
     let line = line.unwrap();
@@ -18,7 +20,7 @@ pub fn start(stdin: Stdin, mut stdout: Stdout) {
       }
       continue;
     }
-    println!("{}", eval(Node::Prog(program)).inspect());
+    println!("{}", eval(Node::Prog(program), &mut env).inspect());
     print!(">> ");
     stdout.flush().unwrap();
   }
