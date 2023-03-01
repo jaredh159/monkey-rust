@@ -1,16 +1,40 @@
-use std::collections::HashMap;
+use crate::parser::{BlockStatement, Identifier, Node};
+use std::{collections::HashMap, rc::Rc};
 
 #[derive(Clone, Debug)]
 pub enum Obj {
   Int(Integer),
   Bool(Boolean),
   Return(Box<ReturnValue>),
+  Func(Function),
   Err(Error),
   Null,
 }
 
 pub trait Object {
   fn inspect(&self) -> String;
+}
+
+#[derive(Clone, Debug)]
+pub struct Function {
+  pub params: Vec<Identifier>,
+  pub body: BlockStatement,
+  pub env: Rc<Env>,
+}
+
+impl Object for Function {
+  fn inspect(&self) -> String {
+    format!(
+      "fn({}) {{\n{}\n}}",
+      self
+        .params
+        .iter()
+        .map(|ident| ident.string())
+        .collect::<Vec<_>>()
+        .join(", "),
+      self.body.string()
+    )
+  }
 }
 
 #[derive(Clone, Debug)]
@@ -73,6 +97,7 @@ impl Obj {
       Obj::Bool(_) => "Obj::Bool",
       Obj::Return(_) => "Obj::Return",
       Obj::Err(_) => "Obj::Err",
+      Obj::Func(_) => "Obj::Func",
       Obj::Null => "Obj::Null",
     }
   }
@@ -99,23 +124,41 @@ impl Object for Obj {
       Obj::Err(err) => err.inspect(),
       Obj::Return(return_value) => return_value.inspect(),
       Obj::Null => "null".to_string(),
+      Obj::Func(function) => function.inspect(),
     }
   }
 }
 
+#[derive(Clone, Debug)]
 pub struct Env {
   pub store: HashMap<String, Obj>,
+  pub outer: Option<Rc<Env>>,
 }
 
 impl Env {
   pub fn new() -> Env {
     Env {
       store: HashMap::new(),
+      outer: None,
+    }
+  }
+
+  pub fn new_enclosed(outer: Rc<Env>) -> Env {
+    Env {
+      store: HashMap::new(),
+      outer: Some(outer),
     }
   }
 
   pub fn get(&self, name: &String) -> Option<&Obj> {
-    self.store.get(name)
+    let obj = self.store.get(name);
+    if obj.is_some() {
+      obj
+    } else if let Some(outer) = &self.outer {
+      outer.get(name)
+    } else {
+      None
+    }
   }
 
   pub fn set(&mut self, name: String, value: Obj) {

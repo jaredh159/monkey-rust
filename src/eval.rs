@@ -1,5 +1,7 @@
-use crate::object::{Env, Integer, Obj, ReturnValue};
-use crate::parser::{BlockStatement, Expr, Identifier, IfExpression, Program, Statement};
+use std::rc::Rc;
+
+use crate::object::{Env, Function, Integer, Obj, ReturnValue};
+use crate::parser::{BlockStatement, Either, Expr, Identifier, IfExpression, Program, Statement};
 
 pub enum Node {
   Prog(Program),
@@ -19,6 +21,9 @@ impl Node {
   }
 }
 
+// todo: use const members for true false
+// maybe todo: refactor eval and friends to always return Result?
+
 pub fn eval(node: Node, env: &mut Env) -> Obj {
   match node {
     Node::Prog(program) => eval_program(program, env),
@@ -36,8 +41,26 @@ pub fn eval(node: Node, env: &mut Env) -> Obj {
     }
     Node::Stmt(Statement::Block(block)) => eval_block_statement(block, env),
     Node::Expr(Expr::Bool(boolean)) => Obj::bool(boolean.value),
-    Node::Expr(Expr::Call(_)) => todo!(),
-    Node::Expr(Expr::Func(_)) => todo!(),
+    Node::Expr(Expr::Call(call)) => {
+      let fn_node = match call.function {
+        Either::Left(ident) => Node::Expr(Expr::Ident(ident)),
+        Either::Right(fn_lit) => Node::Expr(Expr::Func(fn_lit)),
+      };
+      let function = eval(fn_node, env);
+      if function.is_err() {
+        return function;
+      }
+      let args = match eval_expressions(call.arguments, env) {
+        Ok(args) => args,
+        Err(err) => return err,
+      };
+      apply_function(function, args)
+    }
+    Node::Expr(Expr::Func(fn_lit)) => Obj::Func(Function {
+      params: fn_lit.parameters,
+      body: fn_lit.body,
+      env: Rc::new(env.clone()), // todo
+    }),
     Node::Expr(Expr::Ident(ident)) => eval_identifier(ident, env),
     Node::Expr(Expr::If(if_expr)) => eval_if_expression(if_expr, env),
     Node::Expr(Expr::Int(int)) => Obj::int(int.value),
@@ -56,6 +79,45 @@ pub fn eval(node: Node, env: &mut Env) -> Obj {
       eval_infix_expr(lhs, infix.operator, rhs)
     }
   }
+}
+
+fn apply_function(obj: Obj, args: Vec<Obj>) -> Obj {
+  if let Obj::Func(function) = obj {
+    let mut fn_env = extended_function_env(&function, args);
+    let evaluated = eval(Node::Stmt(Statement::Block(function.body)), &mut fn_env);
+    unrap_return_value(evaluated)
+  } else {
+    Obj::err(format!("not a function: {}", obj.type_string()))
+  }
+}
+
+fn unrap_return_value(obj: Obj) -> Obj {
+  if let Obj::Return(return_value) = obj {
+    return_value.value
+  } else {
+    obj
+  }
+}
+
+fn extended_function_env(function: &Function, args: Vec<Obj>) -> Env {
+  let mut env = Env::new_enclosed(function.env.clone());
+  for (param, arg) in function.params.iter().zip(args) {
+    env.set(param.value.clone(), arg);
+  }
+  env
+}
+
+fn eval_expressions(exprs: Vec<Expr>, env: &mut Env) -> Result<Vec<Obj>, Obj> {
+  let mut objects = Vec::new();
+  for expr in exprs {
+    let evaluated = eval(Node::Expr(expr), env);
+    if evaluated.is_err() {
+      return Err(evaluated);
+    }
+    objects.push(evaluated);
+  }
+
+  return Ok(objects);
 }
 
 fn eval_identifier(ident: Identifier, env: &mut Env) -> Obj {
@@ -173,7 +235,47 @@ fn eval_block_statement(block: BlockStatement, env: &mut Env) -> Obj {
 mod tests {
   use super::*;
   use crate::lexer::Lexer;
-  use crate::parser::Parser;
+  use crate::parser::{Node as ParserNode, Parser};
+
+  #[test]
+  fn test_closures() {
+    let input = r#"
+    let newAdder = fn(x) {
+      fn(y) { x + y };
+    }
+    let addTwo = newAdder(2);
+    addTwo(2);
+    "#;
+    assert_integer_object(test_eval(input), 4);
+  }
+
+  #[test]
+  fn test_function_application() {
+    let cases = vec![
+      ("let identity = fn(x) { x; }; identity(5);", 5),
+      ("let identity = fn(x) { return x; }; identity(5);", 5),
+      ("let double = fn(x) { x * 2; }; double(5);", 10),
+      ("let add = fn(x, y) { x + y; }; add(5, 5);", 10),
+      ("let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", 20),
+      ("fn(x) { x; }(5)", 5),
+    ];
+    for (input, expected) in cases {
+      let evaluated = test_eval(input);
+      assert_integer_object(evaluated, expected);
+    }
+  }
+
+  #[test]
+  fn test_function_object() {
+    let evaluated = test_eval("fn(x) { x + 2; };");
+    if let Obj::Func(function) = evaluated {
+      assert_eq!(function.params.len(), 1);
+      assert_eq!(function.params[0].string(), "x");
+      assert_eq!(function.body.string(), "(x + 2)");
+    } else {
+      panic!("object is not a Function. got={:?}", evaluated);
+    }
+  }
 
   #[test]
   fn test_let_statements() {
