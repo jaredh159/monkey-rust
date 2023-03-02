@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::object::{Env, Function, Integer, Obj, ReturnValue};
+use crate::object::{Env, Function, Integer, Obj, ReturnValue, StringObj};
 use crate::parser::{BlockStatement, Either, Expr, Identifier, IfExpression, Program, Statement};
 
 pub enum Node {
@@ -41,6 +41,9 @@ pub fn eval(node: Node, env: &mut Env) -> Obj {
     }
     Node::Stmt(Statement::Block(block)) => eval_block_statement(block, env),
     Node::Expr(Expr::Bool(boolean)) => Obj::bool(boolean.value),
+    Node::Expr(Expr::String(string)) => Obj::Str(StringObj {
+      value: string.value,
+    }),
     Node::Expr(Expr::Call(call)) => {
       let fn_node = match call.function {
         Either::Left(ident) => Node::Expr(Expr::Ident(ident)),
@@ -132,6 +135,9 @@ fn eval_infix_expr(lhs: Obj, operator: String, rhs: Obj) -> Obj {
     (Obj::Int(lhs), _, Obj::Int(rhs)) => eval_integer_infix_expression(lhs, operator, rhs),
     (Obj::Bool(lhs), "==", Obj::Bool(rhs)) => Obj::bool(lhs.value == rhs.value),
     (Obj::Bool(lhs), "!=", Obj::Bool(rhs)) => Obj::bool(lhs.value != rhs.value),
+    (Obj::Str(lhs), "+", Obj::Str(rhs)) => Obj::Str(StringObj {
+      value: format!("{}{}", lhs.value, rhs.value),
+    }),
     (lhs, operator, rhs) => {
       if lhs.type_string() != rhs.type_string() {
         Obj::err(format!(
@@ -238,6 +244,27 @@ mod tests {
   use crate::parser::{Node as ParserNode, Parser};
 
   #[test]
+  fn test_string_concatenation() {
+    let input = r#""Hello" + " " + "World!""#;
+    let evaluated = test_eval(input);
+    if let Obj::Str(str_lit) = evaluated {
+      assert_eq!(str_lit.value, "Hello World!");
+    } else {
+      panic!("object is not a String. got={:?}", evaluated);
+    }
+  }
+
+  #[test]
+  fn test_string_literal() {
+    let evaluated = test_eval("\"Hello World!\"");
+    if let Obj::Str(str_lit) = evaluated {
+      assert_eq!(str_lit.value, "Hello World!");
+    } else {
+      panic!("object is not a String. got={:?}", evaluated);
+    }
+  }
+
+  #[test]
   fn test_closures() {
     let input = r#"
     let newAdder = fn(x) {
@@ -294,6 +321,10 @@ mod tests {
   #[test]
   fn test_error_handling() {
     let cases = vec![
+      (
+        r#""Hello" - "World!""#,
+        "unknown operator: Obj::Str - Obj::Str",
+      ),
       ("foobar", "identifier not found: foobar"),
       ("5 + true;", "type mismatch: Obj::Int + Obj::Bool"),
       ("5 + true; 5;", "type mismatch: Obj::Int + Obj::Bool"),

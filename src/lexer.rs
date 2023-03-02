@@ -83,6 +83,15 @@ impl Lexer {
   pub fn from(input: &str) -> Lexer {
     Lexer::new(String::from(input))
   }
+
+  fn read_string(&mut self) -> String {
+    let start_pos = self.position + 1;
+    self.read_char();
+    while self.ch != '"' && self.ch != '\0' {
+      self.read_char();
+    }
+    self.input[start_pos..self.position].iter().collect()
+  }
 }
 
 impl Iterator for Lexer {
@@ -104,6 +113,7 @@ impl Iterator for Lexer {
       '*' => token = Token::Asterisk,
       '<' => token = Token::Lt,
       '>' => token = Token::Gt,
+      '"' => token = Token::String(self.read_string()),
       '!' => {
         if self.peek_char() == '=' {
           self.read_char();
@@ -176,6 +186,8 @@ mod tests {
 
     10 == 10;
     10 != 9;
+    "foobar"
+    "foo bar"
     "#;
     let cases = vec![
       Token::Let,
@@ -251,6 +263,8 @@ mod tests {
       Token::NotEq,
       Token::Int("9".to_string()),
       Token::Semicolon,
+      Token::String("foobar".to_string()),
+      Token::String("foo bar".to_string()),
       Token::EOF,
     ];
 

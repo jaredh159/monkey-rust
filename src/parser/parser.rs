@@ -63,6 +63,7 @@ impl Parser {
       Token::LParen => Some(Parser::parse_grouped_expression),
       Token::If => Some(Parser::parse_if_expression),
       Token::Function => Some(Parser::parse_fn_literal),
+      Token::String(_) => Some(Parser::parse_string_literal),
       _ => {
         self
           .errors
@@ -214,6 +215,13 @@ impl Parser {
     Some(Expr::Bool(BooleanLiteral {
       token: self.cur_token.clone(),
       value: self.cur_token == Token::True,
+    }))
+  }
+
+  fn parse_string_literal(&mut self) -> Option<Expr> {
+    Some(Expr::String(StringLiteral {
+      token: self.cur_token.clone(),
+      value: self.cur_token.literal(),
     }))
   }
 
@@ -450,6 +458,17 @@ mod tests {
     Int(i64),
     Str(&'a str),
     Bool(bool),
+  }
+
+  #[test]
+  fn test_string_literal_expressions() {
+    let program = assert_program("\"hello world\";", 1);
+    let stmt = assert_expression_statement(&program[0]);
+    if let Expr::String(string_lit) = stmt {
+      assert_eq!(string_lit.value, "hello world");
+    } else {
+      panic!("expected StringLiteral, got {:?}", stmt);
+    }
   }
 
   #[test]

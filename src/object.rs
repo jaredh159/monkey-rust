@@ -8,11 +8,23 @@ pub enum Obj {
   Return(Box<ReturnValue>),
   Func(Function),
   Err(Error),
+  Str(StringObj),
   Null,
 }
 
 pub trait Object {
   fn inspect(&self) -> String;
+}
+
+#[derive(Clone, Debug)]
+pub struct StringObj {
+  pub value: String,
+}
+
+impl Object for StringObj {
+  fn inspect(&self) -> String {
+    self.value.to_string()
+  }
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +110,7 @@ impl Obj {
       Obj::Return(_) => "Obj::Return",
       Obj::Err(_) => "Obj::Err",
       Obj::Func(_) => "Obj::Func",
+      Obj::Str(_) => "Obj::Str",
       Obj::Null => "Obj::Null",
     }
   }
@@ -125,6 +138,7 @@ impl Object for Obj {
       Obj::Return(return_value) => return_value.inspect(),
       Obj::Null => "null".to_string(),
       Obj::Func(function) => function.inspect(),
+      Obj::Str(string) => string.inspect(),
     }
   }
 }

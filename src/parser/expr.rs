@@ -12,6 +12,21 @@ pub enum Expr {
   Infix(InfixExpression),
   Int(IntegerLiteral),
   Prefix(PrefixExpression),
+  String(StringLiteral),
+}
+
+// StringLiteral
+
+#[derive(Clone, Debug)]
+pub struct StringLiteral {
+  pub token: Token,
+  pub value: String,
+}
+
+impl TokenNode for StringLiteral {
+  fn token(&self) -> &Token {
+    &self.token
+  }
 }
 
 // Bool
@@ -220,6 +235,7 @@ impl Node for Expr {
       Expr::If(if_expr) => if_expr.token.literal(),
       Expr::Func(fn_literal) => fn_literal.token_literal(),
       Expr::Call(call_expr) => call_expr.token_literal(),
+      Expr::String(string) => string.token_literal(),
     }
   }
 
@@ -233,6 +249,7 @@ impl Node for Expr {
       Expr::Func(fn_literal) => fn_literal.string(),
       Expr::Call(call_expr) => call_expr.string(),
       Expr::If(if_expr) => if_expr.string(),
+      Expr::String(string) => string.string(),
     }
   }
 }
