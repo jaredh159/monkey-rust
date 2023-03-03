@@ -9,11 +9,56 @@ pub enum Obj {
   Func(Function),
   Err(Error),
   Str(StringObj),
+  Builtin(BuiltinFn),
   Null,
 }
 
 pub trait Object {
   fn inspect(&self) -> String;
+}
+
+#[derive(Clone, Debug)]
+pub enum BuiltinFn {
+  Len,
+}
+
+impl BuiltinFn {
+  pub fn new_from_ident(ident: &Identifier) -> Option<Self> {
+    match ident.value.as_ref() {
+      "len" => Some(BuiltinFn::Len),
+      _ => None,
+    }
+  }
+  pub fn call(&self, args: Vec<Obj>) -> Obj {
+    match self {
+      BuiltinFn::Len => len(args),
+    }
+  }
+}
+
+fn len(args: Vec<Obj>) -> Obj {
+  if args.len() != 1 {
+    return Obj::err(format!(
+      "wrong number of arguments. got={}, want=1",
+      args.len()
+    ));
+  }
+  let arg = &args[0];
+  match arg {
+    Obj::Str(string) => Obj::int(string.value.len() as i64),
+    _ => Obj::err(format!(
+      "argument to `len` not supported, got {}",
+      arg.type_string()
+    )),
+  }
+}
+
+impl Object for BuiltinFn {
+  fn inspect(&self) -> String {
+    match self {
+      BuiltinFn::Len => "builtin function `len`".to_string(),
+    }
+  }
 }
 
 #[derive(Clone, Debug)]
@@ -111,6 +156,7 @@ impl Obj {
       Obj::Err(_) => "Obj::Err",
       Obj::Func(_) => "Obj::Func",
       Obj::Str(_) => "Obj::Str",
+      Obj::Builtin(_) => "Obj::Builtin",
       Obj::Null => "Obj::Null",
     }
   }
@@ -139,6 +185,7 @@ impl Object for Obj {
       Obj::Null => "null".to_string(),
       Obj::Func(function) => function.inspect(),
       Obj::Str(string) => string.inspect(),
+      Obj::Builtin(builtin) => builtin.inspect(),
     }
   }
 }

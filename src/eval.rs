@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::object::{Env, Function, Integer, Obj, ReturnValue, StringObj};
+use crate::object::{BuiltinFn, Env, Function, Integer, Obj, ReturnValue, StringObj};
 use crate::parser::{BlockStatement, Either, Expr, Identifier, IfExpression, Program, Statement};
 
 pub enum Node {
@@ -89,6 +89,8 @@ fn apply_function(obj: Obj, args: Vec<Obj>) -> Obj {
     let mut fn_env = extended_function_env(&function, args);
     let evaluated = eval(Node::Stmt(Statement::Block(function.body)), &mut fn_env);
     unrap_return_value(evaluated)
+  } else if let Obj::Builtin(builtin) = obj {
+    builtin.call(args)
   } else {
     Obj::err(format!("not a function: {}", obj.type_string()))
   }
@@ -126,7 +128,10 @@ fn eval_expressions(exprs: Vec<Expr>, env: &mut Env) -> Result<Vec<Obj>, Obj> {
 fn eval_identifier(ident: Identifier, env: &mut Env) -> Obj {
   match env.get(&ident.value) {
     Some(val) => val.clone(),
-    None => Obj::err(format!("identifier not found: {}", ident.value)),
+    None => BuiltinFn::new_from_ident(&ident).map_or_else(
+      || Obj::err(format!("identifier not found: {}", ident.value)),
+      |b| Obj::Builtin(b),
+    ),
   }
 }
 
@@ -242,6 +247,33 @@ mod tests {
   use super::*;
   use crate::lexer::Lexer;
   use crate::parser::{Node as ParserNode, Parser};
+
+  #[test]
+  fn test_builtin_functions() {
+    let cases = vec![
+      (r#"len("")"#, 0),
+      (r#"len("four")"#, 4),
+      (r#"len("hello world")"#, 11),
+    ];
+    for (input, expected) in cases {
+      assert_integer_object(test_eval(input), expected)
+    }
+    let err_cases = vec![
+      (r#"len(1)"#, "argument to `len` not supported, got Obj::Int"),
+      (
+        r#"len("one", "two")"#,
+        "wrong number of arguments. got=2, want=1",
+      ),
+    ];
+    for (input, expected) in err_cases {
+      let evaluated = test_eval(input);
+      if let Obj::Err(err) = evaluated {
+        assert_eq!(err.message, expected);
+      } else {
+        panic!("object is not a Error. got={:?}", evaluated);
+      }
+    }
+  }
 
   #[test]
   fn test_string_concatenation() {
