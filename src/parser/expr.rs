@@ -2,22 +2,69 @@ use crate::parser::node::{Node, TokenNode};
 use crate::parser::stmt::BlockStatement;
 use crate::token::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {
+  Array(ArrayLiteral),
   Bool(BooleanLiteral),
   Call(CallExpression),
   Func(FunctionLiteral),
   Ident(Identifier),
   If(IfExpression),
+  Index(IndexExpression),
   Infix(InfixExpression),
   Int(IntegerLiteral),
   Prefix(PrefixExpression),
   String(StringLiteral),
 }
 
+// IndexExpression
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IndexExpression {
+  pub token: Token,
+  pub left: Box<Expr>,
+  pub index: Box<Expr>,
+}
+
+impl Node for IndexExpression {
+  fn token_literal(&self) -> String {
+    self.token.literal()
+  }
+
+  fn string(&self) -> String {
+    format!("({}[{}])", self.left.string(), self.index.string())
+  }
+}
+
+// ArrayLiteral
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArrayLiteral {
+  pub token: Token,
+  pub elements: Vec<Expr>,
+}
+
+impl Node for ArrayLiteral {
+  fn token_literal(&self) -> String {
+    self.token.literal()
+  }
+
+  fn string(&self) -> String {
+    format!(
+      "[{}]",
+      self
+        .elements
+        .iter()
+        .map(|e| e.string())
+        .collect::<Vec<_>>()
+        .join(", ")
+    )
+  }
+}
+
 // StringLiteral
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StringLiteral {
   pub token: Token,
   pub value: String,
@@ -31,7 +78,7 @@ impl TokenNode for StringLiteral {
 
 // Bool
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BooleanLiteral {
   pub token: Token,
   pub value: bool,
@@ -45,7 +92,7 @@ impl TokenNode for BooleanLiteral {
 
 // CallExpression
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CallExpression {
   pub token: Token,
   pub function: Either<Identifier, FunctionLiteral>,
@@ -72,7 +119,7 @@ impl Node for CallExpression {
 
 // Identifier
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Identifier {
   pub token: Token,
   pub value: String,
@@ -86,7 +133,7 @@ impl TokenNode for Identifier {
 
 // IfExpression
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IfExpression {
   pub token: Token,
   pub condition: Box<Expr>,
@@ -113,7 +160,7 @@ impl Node for IfExpression {
 
 // InfixExpression
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct InfixExpression {
   pub token: Token,
   pub lhs: Box<Expr>,
@@ -137,7 +184,7 @@ impl Node for InfixExpression {
 
 // IntegerLiteral
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IntegerLiteral {
   pub token: Token,
   pub value: i64,
@@ -151,7 +198,7 @@ impl TokenNode for IntegerLiteral {
 
 // FunctionLiteral
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionLiteral {
   pub token: Token,
   pub parameters: Vec<Identifier>,
@@ -180,7 +227,7 @@ impl Node for FunctionLiteral {
 
 // PrefixExpression
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PrefixExpression {
   pub token: Token,
   pub operator: String,
@@ -198,7 +245,7 @@ impl Node for PrefixExpression {
 
 // Either
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Either<Left, Right> {
   Left(Left),
   Right(Right),
@@ -236,6 +283,8 @@ impl Node for Expr {
       Expr::Func(fn_literal) => fn_literal.token_literal(),
       Expr::Call(call_expr) => call_expr.token_literal(),
       Expr::String(string) => string.token_literal(),
+      Expr::Array(array) => array.token_literal(),
+      Expr::Index(index) => index.token_literal(),
     }
   }
 
@@ -250,6 +299,8 @@ impl Node for Expr {
       Expr::Call(call_expr) => call_expr.string(),
       Expr::If(if_expr) => if_expr.string(),
       Expr::String(string) => string.string(),
+      Expr::Array(array) => array.string(),
+      Expr::Index(index) => index.string(),
     }
   }
 }

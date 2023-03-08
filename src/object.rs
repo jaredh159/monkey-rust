@@ -1,55 +1,51 @@
 use crate::parser::{BlockStatement, Identifier, Node};
 use std::{collections::HashMap, rc::Rc};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Obj {
-  Int(Integer),
+  Array(Array),
   Bool(Boolean),
-  Return(Box<ReturnValue>),
-  Func(Function),
-  Err(Error),
-  Str(StringObj),
   Builtin(BuiltinFn),
+  Err(Error),
+  Func(Function),
+  Int(Integer),
   Null,
+  Return(Box<ReturnValue>),
+  Str(StringObj),
 }
 
 pub trait Object {
   fn inspect(&self) -> String;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BuiltinFn {
   Len,
+  First,
+  Last,
+  Rest,
+  Push,
 }
 
 impl BuiltinFn {
   pub fn new_from_ident(ident: &Identifier) -> Option<Self> {
     match ident.value.as_ref() {
       "len" => Some(BuiltinFn::Len),
+      "first" => Some(BuiltinFn::First),
+      "last" => Some(BuiltinFn::Last),
+      "rest" => Some(BuiltinFn::Rest),
+      "push" => Some(BuiltinFn::Push),
       _ => None,
     }
   }
   pub fn call(&self, args: Vec<Obj>) -> Obj {
     match self {
       BuiltinFn::Len => len(args),
+      BuiltinFn::First => first(args),
+      BuiltinFn::Last => last(args),
+      BuiltinFn::Rest => rest(args),
+      BuiltinFn::Push => push(args),
     }
-  }
-}
-
-fn len(args: Vec<Obj>) -> Obj {
-  if args.len() != 1 {
-    return Obj::err(format!(
-      "wrong number of arguments. got={}, want=1",
-      args.len()
-    ));
-  }
-  let arg = &args[0];
-  match arg {
-    Obj::Str(string) => Obj::int(string.value.len() as i64),
-    _ => Obj::err(format!(
-      "argument to `len` not supported, got {}",
-      arg.type_string()
-    )),
   }
 }
 
@@ -57,11 +53,15 @@ impl Object for BuiltinFn {
   fn inspect(&self) -> String {
     match self {
       BuiltinFn::Len => "builtin function `len`".to_string(),
+      BuiltinFn::First => "builtin function `first`".to_string(),
+      BuiltinFn::Last => "builtin function `last`".to_string(),
+      BuiltinFn::Rest => "builtin function `rest`".to_string(),
+      BuiltinFn::Push => "builtin function `push`".to_string(),
     }
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StringObj {
   pub value: String,
 }
@@ -72,7 +72,26 @@ impl Object for StringObj {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Array {
+  pub elements: Vec<Obj>,
+}
+
+impl Object for Array {
+  fn inspect(&self) -> String {
+    format!(
+      "[{}]",
+      self
+        .elements
+        .iter()
+        .map(|e| e.inspect())
+        .collect::<Vec<_>>()
+        .join(", ")
+    )
+  }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Function {
   pub params: Vec<Identifier>,
   pub body: BlockStatement,
@@ -94,7 +113,7 @@ impl Object for Function {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Integer {
   pub value: i64,
 }
@@ -105,7 +124,7 @@ impl Object for Integer {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Boolean {
   pub value: bool,
 }
@@ -116,7 +135,7 @@ impl Object for Boolean {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReturnValue {
   pub value: Obj,
 }
@@ -127,7 +146,7 @@ impl Object for ReturnValue {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Error {
   pub message: String,
 }
@@ -150,6 +169,7 @@ impl Obj {
   }
   pub fn type_string(&self) -> &'static str {
     match self {
+      Obj::Array(_) => "Obj::Array",
       Obj::Int(_) => "Obj::Int",
       Obj::Bool(_) => "Obj::Bool",
       Obj::Return(_) => "Obj::Return",
@@ -178,6 +198,7 @@ impl Obj {
 impl Object for Obj {
   fn inspect(&self) -> String {
     match self {
+      Obj::Array(array) => array.inspect(),
       Obj::Int(int) => int.inspect(),
       Obj::Bool(boolean) => boolean.inspect(),
       Obj::Err(err) => err.inspect(),
@@ -190,7 +211,7 @@ impl Object for Obj {
   }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Env {
   pub store: HashMap<String, Obj>,
   pub outer: Option<Rc<Env>>,
@@ -225,4 +246,109 @@ impl Env {
   pub fn set(&mut self, name: String, value: Obj) {
     self.store.insert(name, value);
   }
+}
+
+fn first(args: Vec<Obj>) -> Obj {
+  let arg = match single_arg(args) {
+    Ok(arg) => arg,
+    Err(err) => return err,
+  };
+  if let Obj::Array(array) = arg {
+    if array.elements.len() > 0 {
+      array.elements[0].clone()
+    } else {
+      Obj::Null
+    }
+  } else {
+    Obj::err(format!(
+      "argument to `first` must be Array, got {}",
+      arg.type_string()
+    ))
+  }
+}
+
+fn last(args: Vec<Obj>) -> Obj {
+  let arg = match single_arg(args) {
+    Ok(arg) => arg,
+    Err(err) => return err,
+  };
+  if let Obj::Array(array) = arg {
+    let len = array.elements.len();
+    if len > 0 {
+      array.elements[len - 1].clone()
+    } else {
+      Obj::Null
+    }
+  } else {
+    Obj::err(format!(
+      "argument to `last` must be Array, got {}",
+      arg.type_string()
+    ))
+  }
+}
+
+fn rest(args: Vec<Obj>) -> Obj {
+  let arg = match single_arg(args) {
+    Ok(arg) => arg,
+    Err(err) => return err,
+  };
+  if let Obj::Array(array) = arg {
+    if array.elements.len() > 0 {
+      let foo = &array.elements[1..];
+      let bar = foo.to_vec();
+      Obj::Array(Array { elements: bar })
+    } else {
+      Obj::Null
+    }
+  } else {
+    Obj::err(format!(
+      "argument to `rest` must be Array, got {}",
+      arg.type_string()
+    ))
+  }
+}
+
+fn len(args: Vec<Obj>) -> Obj {
+  let arg = match single_arg(args) {
+    Ok(arg) => arg,
+    Err(err) => return err,
+  };
+  match arg {
+    Obj::Str(string) => Obj::int(string.value.len() as i64),
+    Obj::Array(array) => Obj::int(array.elements.len() as i64),
+    _ => Obj::err(format!(
+      "argument to `len` not supported, got {}",
+      arg.type_string()
+    )),
+  }
+}
+
+fn push(args: Vec<Obj>) -> Obj {
+  if args.len() != 2 {
+    return Obj::err(format!(
+      "wrong number of arguments. got={}, want=2",
+      args.len()
+    ));
+  }
+  let first_arg = &args[0];
+  if let Obj::Array(array) = first_arg {
+    let mut elements = array.elements.clone();
+    elements.push(args[1].clone());
+    Obj::Array(Array { elements })
+  } else {
+    Obj::err(format!(
+      "first argument to `push` must be Array, got {}",
+      first_arg.type_string()
+    ))
+  }
+}
+
+fn single_arg(args: Vec<Obj>) -> Result<Obj, Obj> {
+  if args.len() != 1 {
+    return Err(Obj::err(format!(
+      "wrong number of arguments. got={}, want=1",
+      args.len()
+    )));
+  }
+  Ok(args[0].clone())
 }

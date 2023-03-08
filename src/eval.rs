@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::object::{BuiltinFn, Env, Function, Integer, Obj, ReturnValue, StringObj};
+use crate::object::{Array, BuiltinFn, Env, Function, Integer, Obj, ReturnValue, StringObj};
 use crate::parser::{BlockStatement, Either, Expr, Identifier, IfExpression, Program, Statement};
 
 pub enum Node {
@@ -44,6 +44,24 @@ pub fn eval(node: Node, env: &mut Env) -> Obj {
     Node::Expr(Expr::String(string)) => Obj::Str(StringObj {
       value: string.value,
     }),
+    Node::Expr(Expr::Array(array)) => {
+      let elements = match eval_expressions(array.elements, env) {
+        Ok(elements) => elements,
+        Err(err) => return err,
+      };
+      Obj::Array(Array { elements })
+    }
+    Node::Expr(Expr::Index(index)) => {
+      let left = eval(Node::Expr(*index.left), env);
+      if left.is_err() {
+        return left;
+      }
+      let index = eval(Node::Expr(*index.index), env);
+      if index.is_err() {
+        return index;
+      }
+      eval_index_expr(left, index)
+    }
     Node::Expr(Expr::Call(call)) => {
       let fn_node = match call.function {
         Either::Left(ident) => Node::Expr(Expr::Ident(ident)),
@@ -76,12 +94,31 @@ pub fn eval(node: Node, env: &mut Env) -> Obj {
         return rhs;
       }
       let lhs = eval(Node::Expr(*infix.lhs), env);
-      if rhs.is_err() {
+      if lhs.is_err() {
         return rhs;
       }
       eval_infix_expr(lhs, infix.operator, rhs)
     }
   }
+}
+
+fn eval_index_expr(left: Obj, index: Obj) -> Obj {
+  match (left, index) {
+    (Obj::Array(array), Obj::Int(int)) => eval_array_index_expression(array, int),
+    (left, _) => Obj::err(format!(
+      "index operator not supported: {}",
+      left.type_string()
+    )),
+  }
+}
+
+fn eval_array_index_expression(array: Array, int: Integer) -> Obj {
+  let index = int.value as usize;
+  let max = array.elements.len() - 1;
+  if index > max || int.value < 0 {
+    return Obj::Null;
+  }
+  array.elements[index].clone()
 }
 
 fn apply_function(obj: Obj, args: Vec<Obj>) -> Obj {
@@ -249,28 +286,106 @@ mod tests {
   use crate::parser::{Node as ParserNode, Parser};
 
   #[test]
-  fn test_builtin_functions() {
+  fn test_array_literals() {
+    let input = "[1, 2 * 2, 3 + 3]";
+    let evaluated = test_eval(input);
+    if let Obj::Array(array) = evaluated {
+      assert_eq!(array.elements.len(), 3);
+      assert_integer_object(array.elements[0].clone(), 1);
+      assert_integer_object(array.elements[1].clone(), 4);
+      assert_integer_object(array.elements[2].clone(), 6);
+    } else {
+      panic!("object is not a Array. got={:?}", evaluated);
+    }
+  }
+
+  #[test]
+  fn test_index_expressions() {
     let cases = vec![
-      (r#"len("")"#, 0),
-      (r#"len("four")"#, 4),
-      (r#"len("hello world")"#, 11),
+      ("[1, 2, 3][0]", Obj::int(1)),
+      ("[1, 2, 3][1]", Obj::int(2)),
+      ("[1, 2, 3][2]", Obj::int(3)),
+      ("let i = 0; [1][i];", Obj::int(1)),
+      ("[1, 2, 3][1 + 1];", Obj::int(3)),
+      ("let myArray = [1, 2, 3]; myArray[2];", Obj::int(3)),
+      (
+        "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];",
+        Obj::int(6),
+      ),
+      (
+        "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]",
+        Obj::int(2),
+      ),
+      ("[1, 2, 3][3]", Obj::Null),
+      ("[1, 2, 3][-1]", Obj::Null),
     ];
     for (input, expected) in cases {
-      assert_integer_object(test_eval(input), expected)
+      match expected {
+        Obj::Int(int) => assert_integer_object(test_eval(input), int.value),
+        _ => assert!(test_eval(input).type_string() == "Obj::Null"),
+      }
     }
-    let err_cases = vec![
-      (r#"len(1)"#, "argument to `len` not supported, got Obj::Int"),
+  }
+
+  #[test]
+  fn test_builtin_functions() {
+    let cases = vec![
+      (r#"len("")"#, Obj::int(0)),
+      (r#"len("four")"#, Obj::int(4)),
+      (r#"len("hello world")"#, Obj::int(11)),
+      (r#"len([1, 2, 3])"#, Obj::int(3)),
+      (r#"len([1, [3, 4]])"#, Obj::int(2)),
+      (r#"len([[]])"#, Obj::int(1)),
+      (r#"len([])"#, Obj::int(0)),
+      (r#"first([1])"#, Obj::int(1)),
+      (r#"first([])"#, Obj::Null),
+      (r#"first([3, 1])"#, Obj::int(3)),
+      (r#"last([1])"#, Obj::int(1)),
+      (r#"last([])"#, Obj::Null),
+      (r#"last([3, 1])"#, Obj::int(1)),
+      (r#"rest([1])"#, Obj::Array(Array { elements: vec![] })),
+      (r#"rest([])"#, Obj::Null),
+      (
+        r#"rest([1, 2, 3])"#,
+        Obj::Array(Array {
+          elements: vec![Obj::int(2), Obj::int(3)],
+        }),
+      ),
+      (
+        r#"push([1], 2)"#,
+        Obj::Array(Array {
+          elements: vec![Obj::int(1), Obj::int(2)],
+        }),
+      ),
+      (
+        r#"push([], 1)"#,
+        Obj::Array(Array {
+          elements: vec![Obj::int(1)],
+        }),
+      ),
+      (
+        r#"let a = [1]; push(a, 2); a;"#,
+        Obj::Array(Array {
+          elements: vec![Obj::int(1)],
+        }),
+      ),
+      (
+        r#"len(1)"#,
+        Obj::err("argument to `len` not supported, got Obj::Int".to_string()),
+      ),
       (
         r#"len("one", "two")"#,
-        "wrong number of arguments. got=2, want=1",
+        Obj::err("wrong number of arguments. got=2, want=1".to_string()),
       ),
     ];
-    for (input, expected) in err_cases {
+    for (input, expected) in cases {
       let evaluated = test_eval(input);
-      if let Obj::Err(err) = evaluated {
-        assert_eq!(err.message, expected);
-      } else {
-        panic!("object is not a Error. got={:?}", evaluated);
+      match (evaluated, expected) {
+        (evaluated, Obj::Int(int)) => assert_integer_object(evaluated, int.value),
+        (evaluated, Obj::Array(array)) => assert!(evaluated == Obj::Array(array)),
+        (Obj::Err(eval_err), Obj::Err(err)) => assert_eq!(eval_err.message, err.message),
+        (Obj::Null, Obj::Null) => assert!(true),
+        (_, expected) => panic!("unexpected eval result: {}", expected.type_string()),
       }
     }
   }

@@ -16,6 +16,7 @@ enum Precedence {
   Product,
   Prefix,
   Call,
+  Index,
 }
 
 impl Token {
@@ -30,6 +31,7 @@ impl Token {
       Token::Slash => Precedence::Product,
       Token::Asterisk => Precedence::Product,
       Token::LParen => Precedence::Call,
+      Token::LBracket => Precedence::Index,
       _ => Precedence::Lowest,
     }
   }
@@ -64,6 +66,7 @@ impl Parser {
       Token::If => Some(Parser::parse_if_expression),
       Token::Function => Some(Parser::parse_fn_literal),
       Token::String(_) => Some(Parser::parse_string_literal),
+      Token::LBracket => Some(Parser::parse_array_literal),
       _ => {
         self
           .errors
@@ -76,6 +79,7 @@ impl Parser {
   fn infix_parse_fn(&mut self) -> Option<InfixParseFn> {
     match &self.peek_token {
       Token::LParen => Some(Parser::parse_call_expression),
+      Token::LBracket => Some(Parser::parse_index_expression),
       Token::Eq
       | Token::NotEq
       | Token::Lt
@@ -119,6 +123,20 @@ impl Parser {
       }
     }
     Some(expr)
+  }
+
+  fn parse_index_expression(&mut self, left: Expr) -> Option<Expr> {
+    let token = self.cur_token.clone();
+    self.advance();
+    let index = self.parse_expression(Precedence::Lowest)?;
+    if !self.advance_expecting(Token::RBracket) {
+      return None;
+    }
+    Some(Expr::Index(IndexExpression {
+      token,
+      left: Box::new(left),
+      index: Box::new(index),
+    }))
   }
 
   fn parse_prefix_expression(&mut self) -> Option<Expr> {
@@ -278,7 +296,7 @@ impl Parser {
 
   fn parse_call_expression(&mut self, left: Expr) -> Option<Expr> {
     let token = self.cur_token.clone();
-    let arguments = match self.parse_call_arguments() {
+    let arguments = match self.parse_expression_list(Token::RParen) {
       Some(expr) => expr,
       None => return None,
     };
@@ -296,9 +314,15 @@ impl Parser {
     }))
   }
 
-  fn parse_call_arguments(&mut self) -> Option<Vec<Expr>> {
+  fn parse_array_literal(&mut self) -> Option<Expr> {
+    let token = self.cur_token.clone();
+    let elements = self.parse_expression_list(Token::RBracket)?;
+    Some(Expr::Array(ArrayLiteral { token, elements }))
+  }
+
+  fn parse_expression_list(&mut self, end: Token) -> Option<Vec<Expr>> {
     let mut args = Vec::new();
-    if self.peek_token == Token::RParen {
+    if self.peek_token == end {
       self.advance();
       return Some(args);
     }
@@ -320,7 +344,7 @@ impl Parser {
       args.push(arg)
     }
 
-    if !self.advance_expecting(Token::RParen) {
+    if !self.advance_expecting(end) {
       return None;
     }
 
@@ -458,6 +482,43 @@ mod tests {
     Int(i64),
     Str(&'a str),
     Bool(bool),
+  }
+
+  #[test]
+  fn test_index_expressions() {
+    let program = assert_program("myArray[1 + 1]", 1);
+    let stmt = assert_expression_statement(&program[0]);
+    if let Expr::Index(index) = stmt {
+      assert_identifier(&index.left, "myArray");
+      assert_infix(&index.index, Lit::Int(1), "+", Lit::Int(1))
+    } else {
+      panic!("expected IndexExpression, got {:?}", stmt);
+    }
+  }
+
+  #[test]
+  fn test_array_literals() {
+    let program = assert_program("[1, 2 * 2, 3 + 3]", 1);
+    let stmt = assert_expression_statement(&program[0]);
+    if let Expr::Array(array) = stmt {
+      assert_eq!(array.elements.len(), 3);
+      assert_integer_literal(&array.elements[0], 1);
+      assert_infix(&array.elements[1], Lit::Int(2), "*", Lit::Int(2));
+      assert_infix(&array.elements[2], Lit::Int(3), "+", Lit::Int(3));
+    } else {
+      panic!("expected ArrayLiteral, got {:?}", stmt);
+    }
+  }
+
+  #[test]
+  fn test_empty_array_literals() {
+    let program = assert_program("[]", 1);
+    let stmt = assert_expression_statement(&program[0]);
+    if let Expr::Array(array) = stmt {
+      assert_eq!(array.elements.len(), 0);
+    } else {
+      panic!("expected ArrayLiteral, got {:?}", stmt);
+    }
   }
 
   #[test]
@@ -623,6 +684,14 @@ mod tests {
       (
         "add(a + b + c * d / f + g)",
         "add((((a + b) + ((c * d) / f)) + g))",
+      ),
+      (
+        "a * [1, 2, 3, 4][b * c] * d",
+        "((a * ([1, 2, 3, 4][(b * c)])) * d)",
+      ),
+      (
+        "add(a * b[2], b[1], 2 * [1, 2][1])",
+        "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))",
       ),
     ];
     for (input, expected) in cases {

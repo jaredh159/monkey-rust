@@ -2,7 +2,7 @@ use crate::parser::expr::{Expr, Identifier};
 use crate::parser::node::Node;
 use crate::token::Token;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Statement {
   Let(Token, Identifier, Expr),
   Return(Token, Expr),
@@ -36,7 +36,7 @@ impl Node for Statement {
 
 // BlockStatement
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockStatement {
   pub token: Token,
   pub statements: Vec<Statement>,

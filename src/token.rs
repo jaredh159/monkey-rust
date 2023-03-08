@@ -1,7 +1,7 @@
 use enum_as_inner::EnumAsInner;
 use std::mem;
 
-#[derive(Debug, PartialEq, Clone, EnumAsInner)]
+#[derive(Debug, PartialEq, Eq, Clone, EnumAsInner)]
 pub enum Token {
   Illegal,
   EOF,
@@ -14,6 +14,8 @@ pub enum Token {
   RParen,
   LBrace,
   RBrace,
+  LBracket,
+  RBracket,
 
   // keywords
   Function,
@@ -60,6 +62,8 @@ impl Token {
       Token::RParen => ")".to_string(),
       Token::LBrace => "{".to_string(),
       Token::RBrace => "}".to_string(),
+      Token::LBracket => "[".to_string(),
+      Token::RBracket => "]".to_string(),
       Token::Function => "fn".to_string(),
       Token::Let => "let".to_string(),
       Token::True => "true".to_string(),
@@ -93,6 +97,8 @@ impl Token {
       Token::RParen => "Token::RParen",
       Token::LBrace => "Token::LBrace",
       Token::RBrace => "Token::RBrace",
+      Token::LBracket => "Token::LBracket",
+      Token::RBracket => "Token::RBracket",
       Token::Function => "Token::Function",
       Token::Let => "Token::Let",
       Token::True => "Token::True",

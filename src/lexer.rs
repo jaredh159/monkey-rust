@@ -109,6 +109,8 @@ impl Iterator for Lexer {
       '-' => token = Token::Minus,
       '{' => token = Token::LBrace,
       '}' => token = Token::RBrace,
+      '[' => token = Token::LBracket,
+      ']' => token = Token::RBracket,
       '/' => token = Token::Slash,
       '*' => token = Token::Asterisk,
       '<' => token = Token::Lt,
@@ -188,6 +190,7 @@ mod tests {
     10 != 9;
     "foobar"
     "foo bar"
+    [1, 2];
     "#;
     let cases = vec![
       Token::Let,
@@ -265,6 +268,12 @@ mod tests {
       Token::Semicolon,
       Token::String("foobar".to_string()),
       Token::String("foo bar".to_string()),
+      Token::LBracket,
+      Token::Int("1".to_string()),
+      Token::Comma,
+      Token::Int("2".to_string()),
+      Token::RBracket,
+      Token::Semicolon,
       Token::EOF,
     ];
 
