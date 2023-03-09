@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::object::{Array, BuiltinFn, Env, Function, Integer, Obj, ReturnValue, StringObj};
@@ -10,7 +11,7 @@ pub enum Node {
 }
 
 impl Node {
-  fn eval_map<F>(self, env: &mut Env, f: F) -> Obj
+  fn eval_map<F>(self, env: Rc<RefCell<Env>>, f: F) -> Obj
   where
     F: FnOnce(Obj) -> Obj,
   {
@@ -24,16 +25,19 @@ impl Node {
 // todo: use const members for true false
 // maybe todo: refactor eval and friends to always return Result?
 
-pub fn eval(node: Node, env: &mut Env) -> Obj {
+pub fn eval(node: Node, env: Rc<RefCell<Env>>) -> Obj {
   match node {
     Node::Prog(program) => eval_program(program, env),
     Node::Stmt(Statement::Expression(_, expr)) => eval(Node::Expr(expr), env),
     Node::Stmt(Statement::Let(_, identifier, expr)) => {
-      let value = eval(Node::Expr(expr), env);
+      let value = eval(Node::Expr(expr), Rc::clone(&env));
       if value.is_err() {
         return value;
       }
-      env.set(identifier.value, value);
+      {
+        let mut env = env.borrow_mut();
+        env.set(identifier.value, value);
+      }
       Obj::Null
     }
     Node::Stmt(Statement::Return(_, expr)) => {
@@ -52,7 +56,7 @@ pub fn eval(node: Node, env: &mut Env) -> Obj {
       Obj::Array(Array { elements })
     }
     Node::Expr(Expr::Index(index)) => {
-      let left = eval(Node::Expr(*index.left), env);
+      let left = eval(Node::Expr(*index.left), Rc::clone(&env));
       if left.is_err() {
         return left;
       }
@@ -67,7 +71,7 @@ pub fn eval(node: Node, env: &mut Env) -> Obj {
         Either::Left(ident) => Node::Expr(Expr::Ident(ident)),
         Either::Right(fn_lit) => Node::Expr(Expr::Func(fn_lit)),
       };
-      let function = eval(fn_node, env);
+      let function = eval(fn_node, Rc::clone(&env));
       if function.is_err() {
         return function;
       }
@@ -80,7 +84,7 @@ pub fn eval(node: Node, env: &mut Env) -> Obj {
     Node::Expr(Expr::Func(fn_lit)) => Obj::Func(Function {
       params: fn_lit.parameters,
       body: fn_lit.body,
-      env: Rc::new(env.clone()), // todo
+      env: Rc::clone(&env),
     }),
     Node::Expr(Expr::Ident(ident)) => eval_identifier(ident, env),
     Node::Expr(Expr::If(if_expr)) => eval_if_expression(if_expr, env),
@@ -89,7 +93,7 @@ pub fn eval(node: Node, env: &mut Env) -> Obj {
       Node::Expr(*p.rhs).eval_map(env, |rhs| eval_prefix_expr(&p.operator, rhs))
     }
     Node::Expr(Expr::Infix(infix)) => {
-      let rhs = eval(Node::Expr(*infix.rhs), env);
+      let rhs = eval(Node::Expr(*infix.rhs), Rc::clone(&env));
       if rhs.is_err() {
         return rhs;
       }
@@ -123,8 +127,11 @@ fn eval_array_index_expression(array: Array, int: Integer) -> Obj {
 
 fn apply_function(obj: Obj, args: Vec<Obj>) -> Obj {
   if let Obj::Func(function) = obj {
-    let mut fn_env = extended_function_env(&function, args);
-    let evaluated = eval(Node::Stmt(Statement::Block(function.body)), &mut fn_env);
+    let fn_env = extended_function_env(&function, args);
+    let evaluated = eval(
+      Node::Stmt(Statement::Block(function.body)),
+      Rc::new(RefCell::new(fn_env)), // check this..
+    );
     unrap_return_value(evaluated)
   } else if let Obj::Builtin(builtin) = obj {
     builtin.call(args)
@@ -142,17 +149,17 @@ fn unrap_return_value(obj: Obj) -> Obj {
 }
 
 fn extended_function_env(function: &Function, args: Vec<Obj>) -> Env {
-  let mut env = Env::new_enclosed(function.env.clone());
+  let mut env = Env::new_enclosed(Rc::clone(&function.env));
   for (param, arg) in function.params.iter().zip(args) {
     env.set(param.value.clone(), arg);
   }
   env
 }
 
-fn eval_expressions(exprs: Vec<Expr>, env: &mut Env) -> Result<Vec<Obj>, Obj> {
+fn eval_expressions(exprs: Vec<Expr>, env: Rc<RefCell<Env>>) -> Result<Vec<Obj>, Obj> {
   let mut objects = Vec::new();
   for expr in exprs {
-    let evaluated = eval(Node::Expr(expr), env);
+    let evaluated = eval(Node::Expr(expr), Rc::clone(&env));
     if evaluated.is_err() {
       return Err(evaluated);
     }
@@ -162,8 +169,8 @@ fn eval_expressions(exprs: Vec<Expr>, env: &mut Env) -> Result<Vec<Obj>, Obj> {
   return Ok(objects);
 }
 
-fn eval_identifier(ident: Identifier, env: &mut Env) -> Obj {
-  match env.get(&ident.value) {
+fn eval_identifier(ident: Identifier, env: Rc<RefCell<Env>>) -> Obj {
+  match env.borrow().get(&ident.value) {
     Some(val) => val.clone(),
     None => BuiltinFn::new_from_ident(&ident).map_or_else(
       || Obj::err(format!("identifier not found: {}", ident.value)),
@@ -237,8 +244,8 @@ fn eval_minus_prefix_operator_expression(rhs: Obj) -> Obj {
   }
 }
 
-fn eval_if_expression(if_expr: IfExpression, env: &mut Env) -> Obj {
-  let condition = eval(Node::Expr(*if_expr.condition), env);
+fn eval_if_expression(if_expr: IfExpression, env: Rc<RefCell<Env>>) -> Obj {
+  let condition = eval(Node::Expr(*if_expr.condition), Rc::clone(&env));
   if condition.is_err() {
     condition
   } else if condition.is_truthy() {
@@ -253,10 +260,10 @@ fn eval_if_expression(if_expr: IfExpression, env: &mut Env) -> Obj {
   }
 }
 
-fn eval_program(program: Program, env: &mut Env) -> Obj {
+fn eval_program(program: Program, env: Rc<RefCell<Env>>) -> Obj {
   let mut result = Obj::Null;
   for stmt in program {
-    result = eval(Node::Stmt(stmt), env);
+    result = eval(Node::Stmt(stmt), Rc::clone(&env));
     if let Obj::Return(return_value) = &result {
       return return_value.value.clone();
     } else if let Obj::Err(_) = &result {
@@ -266,10 +273,10 @@ fn eval_program(program: Program, env: &mut Env) -> Obj {
   result
 }
 
-fn eval_block_statement(block: BlockStatement, env: &mut Env) -> Obj {
+fn eval_block_statement(block: BlockStatement, env: Rc<RefCell<Env>>) -> Obj {
   let mut result = Obj::Null;
   for stmt in block.statements {
-    result = eval(Node::Stmt(stmt), env);
+    result = eval(Node::Stmt(stmt), Rc::clone(&env));
     if let Obj::Return(_) | Obj::Err(_) = &result {
       return result;
     }
@@ -421,6 +428,20 @@ mod tests {
     addTwo(2);
     "#;
     assert_integer_object(test_eval(input), 4);
+  }
+
+  #[test]
+  fn test_recursion() {
+    let input = r#"
+    let foo = fn(x) {
+      if (x > 0) {
+        return foo(x - 1);
+      }
+      return x;
+    }
+    foo(1);
+    "#;
+    assert_integer_object(test_eval(input), 0);
   }
 
   #[test]
@@ -637,7 +658,7 @@ mod tests {
     let lexer = Lexer::from(input);
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
-    let mut env = Env::new();
-    eval(Node::Prog(program), &mut env)
+    let env = Env::new();
+    eval(Node::Prog(program), Rc::new(RefCell::new(env)))
   }
 }

@@ -1,5 +1,5 @@
 use crate::parser::{BlockStatement, Identifier, Node};
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Obj {
@@ -95,7 +95,7 @@ impl Object for Array {
 pub struct Function {
   pub params: Vec<Identifier>,
   pub body: BlockStatement,
-  pub env: Rc<Env>,
+  pub env: Rc<RefCell<Env>>,
 }
 
 impl Object for Function {
@@ -214,7 +214,7 @@ impl Object for Obj {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Env {
   pub store: HashMap<String, Obj>,
-  pub outer: Option<Rc<Env>>,
+  pub outer: Option<Rc<RefCell<Env>>>,
 }
 
 impl Env {
@@ -225,19 +225,18 @@ impl Env {
     }
   }
 
-  pub fn new_enclosed(outer: Rc<Env>) -> Env {
+  pub fn new_enclosed(outer: Rc<RefCell<Env>>) -> Env {
     Env {
       store: HashMap::new(),
       outer: Some(outer),
     }
   }
 
-  pub fn get(&self, name: &String) -> Option<&Obj> {
-    let obj = self.store.get(name);
-    if obj.is_some() {
-      obj
+  pub fn get(&self, name: &String) -> Option<Obj> {
+    if let Some(obj) = self.store.get(name) {
+      Some(obj.clone())
     } else if let Some(outer) = &self.outer {
-      outer.get(name)
+      outer.borrow().get(name)
     } else {
       None
     }
