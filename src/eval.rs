@@ -445,6 +445,58 @@ mod tests {
   }
 
   #[test]
+  fn test_map() {
+    let input = r#"
+    let map = fn(arr, f) {
+      let iter = fn(arr, accumulated) {
+        if (len(arr) == 0) {
+          accumulated
+        } else {
+          iter(rest(arr), push(accumulated, f(first(arr))));
+        }
+      };
+      iter(arr, []);
+    };
+
+    let a = [1, 2, 3, 4];
+    let double = fn(x) { x * 2 };
+    map(a, double);
+    "#;
+
+    assert_eq!(
+      test_eval(input),
+      Obj::Array(Array {
+        elements: vec![Obj::int(2), Obj::int(4), Obj::int(6), Obj::int(8)]
+      })
+    );
+  }
+
+  #[test]
+  fn test_reduce() {
+    let input = r#"
+    let reduce = fn(arr, initial, f) {
+      let iter = fn(arr, result) {
+        if (len(arr) == 0) {
+          result
+        } else {
+          iter(rest(arr), f(result, first(arr)));
+        }
+      };
+
+      iter(arr, initial);
+    };
+
+    let sum = fn(arr) {
+      reduce(arr, 0, fn(initial, el) { initial + el });
+    };
+
+    sum([1, 2, 3, 4, 5]);
+    "#;
+
+    assert_integer_object(test_eval(input), 15);
+  }
+
+  #[test]
   fn test_function_application() {
     let cases = vec![
       ("let identity = fn(x) { x; }; identity(5);", 5),
