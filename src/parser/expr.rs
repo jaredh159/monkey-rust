@@ -8,6 +8,7 @@ pub enum Expr {
   Bool(BooleanLiteral),
   Call(CallExpression),
   Func(FunctionLiteral),
+  Hash(HashLiteral),
   Ident(Identifier),
   If(IfExpression),
   Index(IndexExpression),
@@ -15,6 +16,32 @@ pub enum Expr {
   Int(IntegerLiteral),
   Prefix(PrefixExpression),
   String(StringLiteral),
+}
+
+// HashLiteral
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HashLiteral {
+  pub token: Token,
+  pub pairs: Vec<(Expr, Expr)>,
+}
+
+impl Node for HashLiteral {
+  fn token_literal(&self) -> String {
+    self.token.literal()
+  }
+
+  fn string(&self) -> String {
+    format!(
+      "{{{}}}",
+      self
+        .pairs
+        .iter()
+        .map(|(key, val)| format!("{}:{}", key.string(), val.string()))
+        .collect::<Vec<_>>()
+        .join(", ")
+    )
+  }
 }
 
 // IndexExpression
@@ -275,6 +302,7 @@ impl Node for Expr {
   fn token_literal(&self) -> String {
     match self {
       Expr::Ident(ident) => ident.token.literal(),
+      Expr::Hash(hash_lit) => hash_lit.token.literal(),
       Expr::Int(int) => int.token_literal(),
       Expr::Prefix(prefix) => prefix.token_literal(),
       Expr::Infix(infix) => infix.token_literal(),
@@ -291,6 +319,7 @@ impl Node for Expr {
   fn string(&self) -> String {
     match self {
       Expr::Ident(ident) => ident.string(),
+      Expr::Hash(hash_lit) => hash_lit.string(),
       Expr::Int(int) => int.string(),
       Expr::Bool(bool_lit) => bool_lit.string(),
       Expr::Prefix(prefix) => prefix.string(),

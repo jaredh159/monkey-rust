@@ -67,6 +67,7 @@ impl Parser {
       Token::Function => Some(Parser::parse_fn_literal),
       Token::String(_) => Some(Parser::parse_string_literal),
       Token::LBracket => Some(Parser::parse_array_literal),
+      Token::LBrace => Some(Parser::parse_hash_literal),
       _ => {
         self
           .errors
@@ -314,6 +315,31 @@ impl Parser {
     }))
   }
 
+  fn parse_hash_literal(&mut self) -> Option<Expr> {
+    let token = self.cur_token.clone();
+    let mut pairs = Vec::new();
+
+    while self.peek_token != Token::RBrace {
+      self.advance();
+      let key = self.parse_expression(Precedence::Lowest)?;
+      if !self.advance_expecting(Token::Colon) {
+        return None;
+      }
+      self.advance();
+      let value = self.parse_expression(Precedence::Lowest)?;
+      pairs.push((key, value));
+      if self.peek_token != Token::RBrace && !self.advance_expecting(Token::Comma) {
+        return None;
+      }
+    }
+
+    if !self.advance_expecting(Token::RBrace) {
+      return None;
+    }
+
+    Some(Expr::Hash(HashLiteral { token, pairs }))
+  }
+
   fn parse_array_literal(&mut self) -> Option<Expr> {
     let token = self.cur_token.clone();
     let elements = self.parse_expression_list(Token::RBracket)?;
@@ -482,6 +508,83 @@ mod tests {
     Int(i64),
     Str(&'a str),
     Bool(bool),
+  }
+
+  #[test]
+  fn test_parse_hash_literal_string_keys() {
+    let program = assert_program(r#"{"one": 1, "two": 2, "three": 3}"#, 1);
+    let stmt = assert_expression_statement(&program[0]);
+    if let Expr::Hash(hash_lit) = stmt {
+      assert_eq!(hash_lit.pairs.len(), 3);
+      let expected = vec![("one", 1), ("two", 2), ("three", 3)];
+      for ((key, value), (exp_key, exp_val)) in hash_lit.pairs.iter().zip(expected.iter()) {
+        match key {
+          Expr::String(string_lit) => assert_eq!(string_lit.value, *exp_key),
+          _ => panic!("expected StringLiteral, got {:?}", key),
+        }
+        assert_integer_literal(value, *exp_val);
+      }
+    } else {
+      panic!("expected HashLiteral, got {:?}", stmt);
+    }
+  }
+
+  #[test]
+  fn test_parse_hash_literal_int_keys() {
+    let program = assert_program("{1: 1, 2: 2, 3: 3}", 1);
+    let stmt = assert_expression_statement(&program[0]);
+    if let Expr::Hash(hash_lit) = stmt {
+      assert_eq!(hash_lit.pairs.len(), 3);
+      let expected = vec![1, 2, 3];
+      for ((key, value), int) in hash_lit.pairs.iter().zip(expected.iter()) {
+        assert_integer_literal(key, *int);
+        assert_integer_literal(value, *int);
+      }
+    } else {
+      panic!("expected HashLiteral, got {:?}", stmt);
+    }
+  }
+
+  #[test]
+  fn test_parse_hash_literal_bool_keys() {
+    let program = assert_program("{true: true, false: false}", 1);
+    let stmt = assert_expression_statement(&program[0]);
+    if let Expr::Hash(hash_lit) = stmt {
+      assert_eq!(hash_lit.pairs.len(), 2);
+      let expected = vec![true, false];
+      for ((key, value), boolean) in hash_lit.pairs.iter().zip(expected.iter()) {
+        assert_literal(key, Lit::Bool(*boolean));
+        assert_literal(value, Lit::Bool(*boolean));
+      }
+    } else {
+      panic!("expected HashLiteral, got {:?}", stmt);
+    }
+  }
+
+  #[test]
+  fn test_parse_hash_literal_expression_values() {
+    let program = assert_program(r#"{"one": 0 + 1, "two": 10 - 8, "three": 15 / 5}"#, 1);
+    let stmt = assert_expression_statement(&program[0]);
+    if let Expr::Hash(hash_lit) = stmt {
+      assert_eq!(hash_lit.pairs.len(), 3);
+      let expected = vec![(0, "+", 1), (10, "-", 8), (15, "/", 5)];
+      for ((_, value), (lhs, op, rhs)) in hash_lit.pairs.iter().zip(expected.iter()) {
+        assert_infix(value, Lit::Int(*lhs), op, Lit::Int(*rhs))
+      }
+    } else {
+      panic!("expected HashLiteral, got {:?}", stmt);
+    }
+  }
+
+  #[test]
+  fn test_parse_hash_literal_empty() {
+    let program = assert_program("{}", 1);
+    let stmt = assert_expression_statement(&program[0]);
+    if let Expr::Hash(hash_lit) = stmt {
+      assert_eq!(hash_lit.pairs.len(), 0);
+    } else {
+      panic!("expected HashLiteral, got {:?}", stmt);
+    }
   }
 
   #[test]

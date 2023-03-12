@@ -1,8 +1,10 @@
+use crate::object::{Array, BuiltinFn, Env, Function};
+use crate::object::{Hash, Integer, Obj, ReturnValue, StringObj};
+use crate::parser::{BlockStatement, Either, Expr, HashLiteral};
+use crate::parser::{Identifier, IfExpression, Program, Statement};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
-
-use crate::object::{Array, BuiltinFn, Env, Function, Integer, Obj, ReturnValue, StringObj};
-use crate::parser::{BlockStatement, Either, Expr, Identifier, IfExpression, Program, Statement};
 
 pub enum Node {
   Prog(Program),
@@ -45,6 +47,7 @@ pub fn eval(node: Node, env: Rc<RefCell<Env>>) -> Obj {
     }
     Node::Stmt(Statement::Block(block)) => eval_block_statement(block, env),
     Node::Expr(Expr::Bool(boolean)) => Obj::bool(boolean.value),
+    Node::Expr(Expr::Hash(hash_lit)) => eval_hash_literal(hash_lit, env),
     Node::Expr(Expr::String(string)) => Obj::Str(StringObj {
       value: string.value,
     }),
@@ -104,6 +107,26 @@ pub fn eval(node: Node, env: Rc<RefCell<Env>>) -> Obj {
       eval_infix_expr(lhs, infix.operator, rhs)
     }
   }
+}
+
+fn eval_hash_literal(hash_lit: HashLiteral, env: Rc<RefCell<Env>>) -> Obj {
+  let mut pairs = HashMap::new();
+  for (key_node, value_node) in hash_lit.pairs {
+    let key = eval(Node::Expr(key_node), Rc::clone(&env));
+    if key.is_err() {
+      return key;
+    }
+    let hash_key = match key.hash_key() {
+      Some(hash_key) => hash_key,
+      None => return Obj::err(format!("unusable as hash key: {}", key.type_string())),
+    };
+    let value = eval(Node::Expr(value_node), Rc::clone(&env));
+    if value.is_err() {
+      return value;
+    }
+    pairs.insert(hash_key, value);
+  }
+  Obj::Hash(Hash { pairs })
 }
 
 fn eval_index_expr(left: Obj, index: Obj) -> Obj {
@@ -290,7 +313,55 @@ fn eval_block_statement(block: BlockStatement, env: Rc<RefCell<Env>>) -> Obj {
 mod tests {
   use super::*;
   use crate::lexer::Lexer;
+  use crate::object::{Boolean, HashKey};
   use crate::parser::{Node as ParserNode, Parser};
+
+  #[test]
+  fn test_hash_literals() {
+    let input = r#"
+    let two = "two";
+    {
+        "one": 10 - 9,
+        two: 1 + 1,
+        "thr" + "ee": 6 / 2,
+        4: 4,
+        true: 5,
+        false: 6
+    }
+    "#;
+    let expected = vec![
+      (
+        HashKey::Str(StringObj {
+          value: "one".to_string(),
+        }),
+        1,
+      ),
+      (
+        HashKey::Str(StringObj {
+          value: "two".to_string(),
+        }),
+        2,
+      ),
+      (
+        HashKey::Str(StringObj {
+          value: "three".to_string(),
+        }),
+        3,
+      ),
+      (HashKey::Int(Integer { value: 4 }), 4),
+      (HashKey::Bool(Boolean { value: true }), 5),
+      (HashKey::Bool(Boolean { value: false }), 6),
+    ];
+    let evaluated = test_eval(input);
+    if let Obj::Hash(hash_lit) = evaluated {
+      assert_eq!(hash_lit.pairs.len(), expected.len());
+      for (key, int) in expected {
+        assert_integer_object(hash_lit.pairs[&key].clone(), int);
+      }
+    } else {
+      panic!("object is not a Hash. got={:?}", evaluated);
+    }
+  }
 
   #[test]
   fn test_array_literals() {

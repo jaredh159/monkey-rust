@@ -1,7 +1,7 @@
 use enum_as_inner::EnumAsInner;
 use std::mem;
 
-#[derive(Debug, PartialEq, Eq, Clone, EnumAsInner)]
+#[derive(Debug, PartialEq, Eq, Clone, EnumAsInner, Hash)]
 pub enum Token {
   Illegal,
   EOF,
@@ -9,6 +9,7 @@ pub enum Token {
   Int(String),
   String(String),
   Comma,
+  Colon,
   Semicolon,
   LParen,
   RParen,
@@ -57,6 +58,7 @@ impl Token {
       Token::Int(int) => int.clone(),
       Token::String(string) => string.clone(),
       Token::Comma => ",".to_string(),
+      Token::Colon => ":".to_string(),
       Token::Semicolon => ";".to_string(),
       Token::LParen => "(".to_string(),
       Token::RParen => ")".to_string(),
@@ -92,6 +94,7 @@ impl Token {
       Token::Int(_) => "Token::Int",
       Token::String(_) => "Token::String",
       Token::Comma => "Token::Comma",
+      Token::Colon => "Token::Colon",
       Token::Semicolon => "Token::Semicolon",
       Token::LParen => "Token::LParen",
       Token::RParen => "Token::RParen",

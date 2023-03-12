@@ -102,6 +102,7 @@ impl Iterator for Lexer {
     let token: Token;
     match self.ch {
       ';' => token = Token::Semicolon,
+      ':' => token = Token::Colon,
       '(' => token = Token::LParen,
       ')' => token = Token::RParen,
       ',' => token = Token::Comma,
@@ -191,6 +192,7 @@ mod tests {
     "foobar"
     "foo bar"
     [1, 2];
+    {"foo": "bar"}
     "#;
     let cases = vec![
       Token::Let,
@@ -274,6 +276,11 @@ mod tests {
       Token::Int("2".to_string()),
       Token::RBracket,
       Token::Semicolon,
+      Token::LBrace,
+      Token::String("foo".to_string()),
+      Token::Colon,
+      Token::String("bar".to_string()),
+      Token::RBrace,
       Token::EOF,
     ];
 

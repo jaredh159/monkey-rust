@@ -12,6 +12,24 @@ pub enum Obj {
   Null,
   Return(Box<ReturnValue>),
   Str(StringObj),
+  Hash(Hash),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum HashKey {
+  Int(Integer),
+  Bool(Boolean),
+  Str(StringObj),
+}
+
+impl HashKey {
+  pub fn inspect(&self) -> String {
+    match self {
+      HashKey::Int(int) => int.inspect(),
+      HashKey::Bool(boolean) => boolean.inspect(),
+      HashKey::Str(string) => string.inspect(),
+    }
+  }
 }
 
 pub trait Object {
@@ -62,6 +80,25 @@ impl Object for BuiltinFn {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Hash {
+  pub pairs: HashMap<HashKey, Obj>,
+}
+
+impl Object for Hash {
+  fn inspect(&self) -> String {
+    format!(
+      "{{{}}}",
+      self
+        .pairs
+        .iter()
+        .map(|(hash_key, value)| format!("{}: {}", hash_key.inspect(), value.inspect()))
+        .collect::<Vec<_>>()
+        .join(", "),
+    )
+  }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StringObj {
   pub value: String,
 }
@@ -113,7 +150,7 @@ impl Object for Function {
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Integer {
   pub value: i64,
 }
@@ -124,7 +161,7 @@ impl Object for Integer {
   }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Boolean {
   pub value: bool,
 }
@@ -178,6 +215,7 @@ impl Obj {
       Obj::Str(_) => "Obj::Str",
       Obj::Builtin(_) => "Obj::Builtin",
       Obj::Null => "Obj::Null",
+      Obj::Hash(_) => "Obj::Hash",
     }
   }
   pub fn is_err(&self) -> bool {
@@ -191,6 +229,14 @@ impl Obj {
       Obj::Null => false,
       Obj::Bool(b) => b.value,
       _ => true,
+    }
+  }
+  pub fn hash_key(&self) -> Option<HashKey> {
+    match self {
+      Obj::Int(int) => Some(HashKey::Int(int.clone())),
+      Obj::Bool(boolean) => Some(HashKey::Bool(boolean.clone())),
+      Obj::Str(string) => Some(HashKey::Str(string.clone())),
+      _ => None,
     }
   }
 }
@@ -207,6 +253,7 @@ impl Object for Obj {
       Obj::Func(function) => function.inspect(),
       Obj::Str(string) => string.inspect(),
       Obj::Builtin(builtin) => builtin.inspect(),
+      Obj::Hash(hash) => hash.inspect(),
     }
   }
 }
