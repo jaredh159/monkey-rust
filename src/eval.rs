@@ -132,11 +132,23 @@ fn eval_hash_literal(hash_lit: HashLiteral, env: Rc<RefCell<Env>>) -> Obj {
 fn eval_index_expr(left: Obj, index: Obj) -> Obj {
   match (left, index) {
     (Obj::Array(array), Obj::Int(int)) => eval_array_index_expression(array, int),
+    (Obj::Hash(hash), index) => eval_hash_index_expression(hash, index),
     (left, _) => Obj::err(format!(
       "index operator not supported: {}",
       left.type_string()
     )),
   }
+}
+
+fn eval_hash_index_expression(hash: Hash, index: Obj) -> Obj {
+  let hash_key = match index.hash_key() {
+    Some(hash_key) => hash_key,
+    None => return Obj::err(format!("unusable as hash key: {}", index.type_string())),
+  };
+  hash
+    .pairs
+    .get(&hash_key)
+    .map_or_else(|| Obj::Null, |val| val.clone())
 }
 
 fn eval_array_index_expression(array: Array, int: Integer) -> Obj {
@@ -315,6 +327,27 @@ mod tests {
   use crate::lexer::Lexer;
   use crate::object::{Boolean, HashKey};
   use crate::parser::{Node as ParserNode, Parser};
+
+  #[test]
+  fn test_hash_index_expressions() {
+    let tests = vec![
+      (r#"{"foo": 5}["foo"]"#, Obj::int(5)),
+      (r#"{"foo": 5}["bar"]"#, Obj::Null),
+      (r#"let key = "foo"; {"foo": 5}[key]"#, Obj::int(5)),
+      (r#"{}["foo"]"#, Obj::Null),
+      (r#"{5: 5}[5]"#, Obj::int(5)),
+      (r#"{true: 5}[true]"#, Obj::int(5)),
+      (r#"{false: 5}[false]"#, Obj::int(5)),
+    ];
+    for (input, expected) in tests {
+      let evaluated = test_eval(input);
+      if let Obj::Int(int) = expected {
+        assert_integer_object(evaluated, int.value);
+      } else {
+        assert_eq!(evaluated, expected);
+      }
+    }
+  }
 
   #[test]
   fn test_hash_literals() {
@@ -615,6 +648,10 @@ mod tests {
       (
         r#""Hello" - "World!""#,
         "unknown operator: Obj::Str - Obj::Str",
+      ),
+      (
+        r#"{"name": "Monkey"}[fn(x) { x }];"#,
+        "unusable as hash key: Obj::Func",
       ),
       ("foobar", "identifier not found: foobar"),
       ("5 + true;", "type mismatch: Obj::Int + Obj::Bool"),
