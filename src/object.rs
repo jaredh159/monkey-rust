@@ -43,6 +43,7 @@ pub enum BuiltinFn {
   Last,
   Rest,
   Push,
+  Puts,
 }
 
 impl BuiltinFn {
@@ -53,6 +54,7 @@ impl BuiltinFn {
       "last" => Some(BuiltinFn::Last),
       "rest" => Some(BuiltinFn::Rest),
       "push" => Some(BuiltinFn::Push),
+      "puts" => Some(BuiltinFn::Puts),
       _ => None,
     }
   }
@@ -63,6 +65,7 @@ impl BuiltinFn {
       BuiltinFn::Last => last(args),
       BuiltinFn::Rest => rest(args),
       BuiltinFn::Push => push(args),
+      BuiltinFn::Puts => puts(args),
     }
   }
 }
@@ -75,6 +78,7 @@ impl Object for BuiltinFn {
       BuiltinFn::Last => "builtin function `last`".to_string(),
       BuiltinFn::Rest => "builtin function `rest`".to_string(),
       BuiltinFn::Push => "builtin function `push`".to_string(),
+      BuiltinFn::Puts => "builtin function `puts`".to_string(),
     }
   }
 }
@@ -387,6 +391,13 @@ fn push(args: Vec<Obj>) -> Obj {
       first_arg.type_string()
     ))
   }
+}
+
+fn puts(args: Vec<Obj>) -> Obj {
+  for arg in args {
+    println!("{}", arg.inspect());
+  }
+  Obj::Null
 }
 
 fn single_arg(args: Vec<Obj>) -> Result<Obj, Obj> {
