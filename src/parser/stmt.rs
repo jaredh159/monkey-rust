@@ -13,23 +13,21 @@ pub enum Statement {
 impl Node for Statement {
   fn token_literal(&self) -> String {
     match self {
-      Statement::Let(token, _, _) => token.literal(),
-      Statement::Return(token, _) => token.literal(),
-      Statement::Expression(token, _) => token.literal(),
-      Statement::Block(block) => block.token.literal(),
+      Self::Let(t, _, _) | Self::Return(t, _) | Self::Expression(t, _) => t.literal(),
+      Self::Block(block) => block.token.literal(),
     }
   }
 
   fn string(&self) -> String {
     match self {
-      Statement::Let(token, name, val) => {
+      Self::Let(token, name, val) => {
         format!("{} {} = {};", token.literal(), name.string(), val.string())
       }
-      Statement::Return(token, value) => {
+      Self::Return(token, value) => {
         format!("{} {};", token.literal(), value.string())
       }
-      Statement::Expression(_, expr) => expr.string(),
-      Statement::Block(block_stmt) => block_stmt.string(),
+      Self::Expression(_, expr) => expr.string(),
+      Self::Block(block_stmt) => block_stmt.string(),
     }
   }
 }
@@ -48,11 +46,6 @@ impl Node for BlockStatement {
   }
 
   fn string(&self) -> String {
-    self
-      .statements
-      .iter()
-      .map(|stmt| stmt.string())
-      .collect::<Vec<String>>()
-      .join("")
+    self.statements.iter().map(Node::string).collect::<String>()
   }
 }

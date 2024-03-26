@@ -3,7 +3,7 @@ use crate::object::{Env, Object};
 use crate::parser::*;
 use crate::{eval::eval, eval::Node};
 use std::cell::RefCell;
-use std::io::{BufRead, Stdin, Stdout, Write};
+use std::io::{Stdin, Stdout, Write};
 use std::rc::Rc;
 
 pub fn start(stdin: Stdin, mut stdout: Stdout) {
@@ -11,12 +11,13 @@ pub fn start(stdin: Stdin, mut stdout: Stdout) {
   stdout.flush().unwrap();
   let env = Rc::new(RefCell::new(Env::new()));
 
-  for line in stdin.lock().lines() {
+  let lines = stdin.lines();
+  for line in lines {
     let line = line.unwrap();
-    let lexer = Lexer::new(line);
+    let lexer = Lexer::new(&line);
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
-    if parser.errors.len() > 0 {
+    if !parser.errors.is_empty() {
       for err in parser.errors {
         eprintln!("  -> {}", err.message());
       }

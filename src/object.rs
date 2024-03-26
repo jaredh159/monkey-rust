@@ -25,9 +25,9 @@ pub enum HashKey {
 impl HashKey {
   pub fn inspect(&self) -> String {
     match self {
-      HashKey::Int(int) => int.inspect(),
-      HashKey::Bool(boolean) => boolean.inspect(),
-      HashKey::Str(string) => string.inspect(),
+      Self::Int(int) => int.inspect(),
+      Self::Bool(boolean) => boolean.inspect(),
+      Self::Str(string) => string.inspect(),
     }
   }
 }
@@ -49,23 +49,23 @@ pub enum BuiltinFn {
 impl BuiltinFn {
   pub fn new_from_ident(ident: &Identifier) -> Option<Self> {
     match ident.value.as_ref() {
-      "len" => Some(BuiltinFn::Len),
-      "first" => Some(BuiltinFn::First),
-      "last" => Some(BuiltinFn::Last),
-      "rest" => Some(BuiltinFn::Rest),
-      "push" => Some(BuiltinFn::Push),
-      "puts" => Some(BuiltinFn::Puts),
+      "len" => Some(Self::Len),
+      "first" => Some(Self::First),
+      "last" => Some(Self::Last),
+      "rest" => Some(Self::Rest),
+      "push" => Some(Self::Push),
+      "puts" => Some(Self::Puts),
       _ => None,
     }
   }
-  pub fn call(&self, args: Vec<Obj>) -> Obj {
+  pub fn call(&self, args: &[Obj]) -> Obj {
     match self {
-      BuiltinFn::Len => len(args),
-      BuiltinFn::First => first(args),
-      BuiltinFn::Last => last(args),
-      BuiltinFn::Rest => rest(args),
-      BuiltinFn::Push => push(args),
-      BuiltinFn::Puts => puts(args),
+      Self::Len => len(args),
+      Self::First => first(args),
+      Self::Last => last(args),
+      Self::Rest => rest(args),
+      Self::Push => push(args),
+      Self::Puts => puts(args),
     }
   }
 }
@@ -73,12 +73,12 @@ impl BuiltinFn {
 impl Object for BuiltinFn {
   fn inspect(&self) -> String {
     match self {
-      BuiltinFn::Len => "builtin function `len`".to_string(),
-      BuiltinFn::First => "builtin function `first`".to_string(),
-      BuiltinFn::Last => "builtin function `last`".to_string(),
-      BuiltinFn::Rest => "builtin function `rest`".to_string(),
-      BuiltinFn::Push => "builtin function `push`".to_string(),
-      BuiltinFn::Puts => "builtin function `puts`".to_string(),
+      Self::Len => "builtin function `len`".to_string(),
+      Self::First => "builtin function `first`".to_string(),
+      Self::Last => "builtin function `last`".to_string(),
+      Self::Rest => "builtin function `rest`".to_string(),
+      Self::Push => "builtin function `push`".to_string(),
+      Self::Puts => "builtin function `puts`".to_string(),
     }
   }
 }
@@ -125,7 +125,7 @@ impl Object for Array {
       self
         .elements
         .iter()
-        .map(|e| e.inspect())
+        .map(Object::inspect)
         .collect::<Vec<_>>()
         .join(", ")
     )
@@ -146,7 +146,7 @@ impl Object for Function {
       self
         .params
         .iter()
-        .map(|ident| ident.string())
+        .map(Node::string)
         .collect::<Vec<_>>()
         .join(", "),
       self.body.string()
@@ -199,47 +199,49 @@ impl Object for Error {
 }
 
 impl Obj {
-  pub fn bool(value: bool) -> Obj {
-    Obj::Bool(Boolean { value })
+  pub const fn bool(value: bool) -> Self {
+    Self::Bool(Boolean { value })
   }
-  pub fn int(value: i64) -> Obj {
-    Obj::Int(Integer { value })
+
+  pub const fn int(value: i64) -> Self {
+    Self::Int(Integer { value })
   }
-  pub fn err(message: String) -> Obj {
-    Obj::Err(Error { message })
+
+  pub const fn err(message: String) -> Self {
+    Self::Err(Error { message })
   }
-  pub fn type_string(&self) -> &'static str {
+
+  pub const fn type_string(&self) -> &'static str {
     match self {
-      Obj::Array(_) => "Obj::Array",
-      Obj::Int(_) => "Obj::Int",
-      Obj::Bool(_) => "Obj::Bool",
-      Obj::Return(_) => "Obj::Return",
-      Obj::Err(_) => "Obj::Err",
-      Obj::Func(_) => "Obj::Func",
-      Obj::Str(_) => "Obj::Str",
-      Obj::Builtin(_) => "Obj::Builtin",
-      Obj::Null => "Obj::Null",
-      Obj::Hash(_) => "Obj::Hash",
+      Self::Array(_) => "Obj::Array",
+      Self::Int(_) => "Obj::Int",
+      Self::Bool(_) => "Obj::Bool",
+      Self::Return(_) => "Obj::Return",
+      Self::Err(_) => "Obj::Err",
+      Self::Func(_) => "Obj::Func",
+      Self::Str(_) => "Obj::Str",
+      Self::Builtin(_) => "Obj::Builtin",
+      Self::Null => "Obj::Null",
+      Self::Hash(_) => "Obj::Hash",
     }
   }
-  pub fn is_err(&self) -> bool {
-    match self {
-      Obj::Err(_) => true,
-      _ => false,
-    }
+
+  pub const fn is_err(&self) -> bool {
+    matches!(self, Self::Err(_))
   }
-  pub fn is_truthy(&self) -> bool {
+
+  pub const fn is_truthy(&self) -> bool {
     match self {
-      Obj::Null => false,
-      Obj::Bool(b) => b.value,
+      Self::Null => false,
+      Self::Bool(b) => b.value,
       _ => true,
     }
   }
   pub fn hash_key(&self) -> Option<HashKey> {
     match self {
-      Obj::Int(int) => Some(HashKey::Int(int.clone())),
-      Obj::Bool(boolean) => Some(HashKey::Bool(boolean.clone())),
-      Obj::Str(string) => Some(HashKey::Str(string.clone())),
+      Self::Int(int) => Some(HashKey::Int(int.clone())),
+      Self::Bool(boolean) => Some(HashKey::Bool(boolean.clone())),
+      Self::Str(string) => Some(HashKey::Str(string.clone())),
       _ => None,
     }
   }
@@ -248,16 +250,16 @@ impl Obj {
 impl Object for Obj {
   fn inspect(&self) -> String {
     match self {
-      Obj::Array(array) => array.inspect(),
-      Obj::Int(int) => int.inspect(),
-      Obj::Bool(boolean) => boolean.inspect(),
-      Obj::Err(err) => err.inspect(),
-      Obj::Return(return_value) => return_value.inspect(),
-      Obj::Null => "null".to_string(),
-      Obj::Func(function) => function.inspect(),
-      Obj::Str(string) => string.inspect(),
-      Obj::Builtin(builtin) => builtin.inspect(),
-      Obj::Hash(hash) => hash.inspect(),
+      Self::Array(array) => array.inspect(),
+      Self::Int(int) => int.inspect(),
+      Self::Bool(boolean) => boolean.inspect(),
+      Self::Err(err) => err.inspect(),
+      Self::Return(return_value) => return_value.inspect(),
+      Self::Null => "null".to_string(),
+      Self::Func(function) => function.inspect(),
+      Self::Str(string) => string.inspect(),
+      Self::Builtin(builtin) => builtin.inspect(),
+      Self::Hash(hash) => hash.inspect(),
     }
   }
 }
@@ -269,28 +271,27 @@ pub struct Env {
 }
 
 impl Env {
-  pub fn new() -> Env {
-    Env {
-      store: HashMap::new(),
-      outer: None,
-    }
+  pub fn new() -> Self {
+    Self { store: HashMap::new(), outer: None }
   }
 
-  pub fn new_enclosed(outer: Rc<RefCell<Env>>) -> Env {
-    Env {
+  pub fn new_enclosed(outer: Rc<RefCell<Self>>) -> Self {
+    Self {
       store: HashMap::new(),
       outer: Some(outer),
     }
   }
 
   pub fn get(&self, name: &String) -> Option<Obj> {
-    if let Some(obj) = self.store.get(name) {
-      Some(obj.clone())
-    } else if let Some(outer) = &self.outer {
-      outer.borrow().get(name)
-    } else {
-      None
-    }
+    self.store.get(name).map_or_else(
+      || {
+        self
+          .outer
+          .as_ref()
+          .map_or_else(|| None, |outer| outer.borrow().get(name))
+      },
+      |obj| Some(obj.clone()),
+    )
   }
 
   pub fn set(&mut self, name: String, value: Obj) {
@@ -298,16 +299,16 @@ impl Env {
   }
 }
 
-fn first(args: Vec<Obj>) -> Obj {
+fn first(args: &[Obj]) -> Obj {
   let arg = match single_arg(args) {
     Ok(arg) => arg,
     Err(err) => return err,
   };
   if let Obj::Array(array) = arg {
-    if array.elements.len() > 0 {
-      array.elements[0].clone()
-    } else {
+    if array.elements.is_empty() {
       Obj::Null
+    } else {
+      array.elements[0].clone()
     }
   } else {
     Obj::err(format!(
@@ -317,7 +318,7 @@ fn first(args: Vec<Obj>) -> Obj {
   }
 }
 
-fn last(args: Vec<Obj>) -> Obj {
+fn last(args: &[Obj]) -> Obj {
   let arg = match single_arg(args) {
     Ok(arg) => arg,
     Err(err) => return err,
@@ -337,18 +338,17 @@ fn last(args: Vec<Obj>) -> Obj {
   }
 }
 
-fn rest(args: Vec<Obj>) -> Obj {
+fn rest(args: &[Obj]) -> Obj {
   let arg = match single_arg(args) {
     Ok(arg) => arg,
     Err(err) => return err,
   };
   if let Obj::Array(array) = arg {
-    if array.elements.len() > 0 {
-      let foo = &array.elements[1..];
-      let bar = foo.to_vec();
-      Obj::Array(Array { elements: bar })
-    } else {
+    if array.elements.is_empty() {
       Obj::Null
+    } else {
+      let elements = &array.elements[1..];
+      Obj::Array(Array { elements: elements.to_vec() })
     }
   } else {
     Obj::err(format!(
@@ -358,14 +358,14 @@ fn rest(args: Vec<Obj>) -> Obj {
   }
 }
 
-fn len(args: Vec<Obj>) -> Obj {
+fn len(args: &[Obj]) -> Obj {
   let arg = match single_arg(args) {
     Ok(arg) => arg,
     Err(err) => return err,
   };
   match arg {
-    Obj::Str(string) => Obj::int(string.value.len() as i64),
-    Obj::Array(array) => Obj::int(array.elements.len() as i64),
+    Obj::Str(string) => Obj::int(i64::try_from(string.value.len()).unwrap()),
+    Obj::Array(array) => Obj::int(i64::try_from(array.elements.len()).unwrap()),
     _ => Obj::err(format!(
       "argument to `len` not supported, got {}",
       arg.type_string()
@@ -373,7 +373,7 @@ fn len(args: Vec<Obj>) -> Obj {
   }
 }
 
-fn push(args: Vec<Obj>) -> Obj {
+fn push(args: &[Obj]) -> Obj {
   if args.len() != 2 {
     return Obj::err(format!(
       "wrong number of arguments. got={}, want=2",
@@ -393,14 +393,14 @@ fn push(args: Vec<Obj>) -> Obj {
   }
 }
 
-fn puts(args: Vec<Obj>) -> Obj {
+fn puts(args: &[Obj]) -> Obj {
   for arg in args {
     println!("{}", arg.inspect());
   }
   Obj::Null
 }
 
-fn single_arg(args: Vec<Obj>) -> Result<Obj, Obj> {
+fn single_arg(args: &[Obj]) -> Result<Obj, Obj> {
   if args.len() != 1 {
     return Err(Obj::err(format!(
       "wrong number of arguments. got={}, want=1",

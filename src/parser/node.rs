@@ -26,10 +26,7 @@ where
 
 impl Node for Program {
   fn token_literal(&self) -> String {
-    match self.first() {
-      Some(stmt) => stmt.token_literal(),
-      None => "".to_string(),
-    }
+    self.first().map_or_else(String::new, Node::token_literal)
   }
 
   fn string(&self) -> String {
@@ -37,7 +34,7 @@ impl Node for Program {
     for statement in self {
       string.push_str(&statement.string());
     }
-    return string;
+    string
   }
 }
 

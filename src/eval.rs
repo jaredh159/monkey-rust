@@ -24,12 +24,9 @@ impl Node {
   }
 }
 
-// todo: use const members for true false
-// maybe todo: refactor eval and friends to always return Result?
-
 pub fn eval(node: Node, env: Rc<RefCell<Env>>) -> Obj {
   match node {
-    Node::Prog(program) => eval_program(program, env),
+    Node::Prog(program) => eval_program(program, &env),
     Node::Stmt(Statement::Expression(_, expr)) => eval(Node::Expr(expr), env),
     Node::Stmt(Statement::Let(_, identifier, expr)) => {
       let value = eval(Node::Expr(expr), Rc::clone(&env));
@@ -45,14 +42,12 @@ pub fn eval(node: Node, env: Rc<RefCell<Env>>) -> Obj {
     Node::Stmt(Statement::Return(_, expr)) => {
       Node::Expr(expr).eval_map(env, |value| Obj::Return(Box::new(ReturnValue { value })))
     }
-    Node::Stmt(Statement::Block(block)) => eval_block_statement(block, env),
+    Node::Stmt(Statement::Block(block)) => eval_block_statement(block, &env),
     Node::Expr(Expr::Bool(boolean)) => Obj::bool(boolean.value),
-    Node::Expr(Expr::Hash(hash_lit)) => eval_hash_literal(hash_lit, env),
-    Node::Expr(Expr::String(string)) => Obj::Str(StringObj {
-      value: string.value,
-    }),
+    Node::Expr(Expr::Hash(hash_lit)) => eval_hash_literal(hash_lit, &env),
+    Node::Expr(Expr::String(string)) => Obj::Str(StringObj { value: string.value }),
     Node::Expr(Expr::Array(array)) => {
-      let elements = match eval_expressions(array.elements, env) {
+      let elements = match eval_expressions(array.elements, &env) {
         Ok(elements) => elements,
         Err(err) => return err,
       };
@@ -78,7 +73,7 @@ pub fn eval(node: Node, env: Rc<RefCell<Env>>) -> Obj {
       if function.is_err() {
         return function;
       }
-      let args = match eval_expressions(call.arguments, env) {
+      let args = match eval_expressions(call.arguments, &env) {
         Ok(args) => args,
         Err(err) => return err,
       };
@@ -89,7 +84,7 @@ pub fn eval(node: Node, env: Rc<RefCell<Env>>) -> Obj {
       body: fn_lit.body,
       env: Rc::clone(&env),
     }),
-    Node::Expr(Expr::Ident(ident)) => eval_identifier(ident, env),
+    Node::Expr(Expr::Ident(ident)) => eval_identifier(&ident, &env),
     Node::Expr(Expr::If(if_expr)) => eval_if_expression(if_expr, env),
     Node::Expr(Expr::Int(int)) => Obj::int(int.value),
     Node::Expr(Expr::Prefix(p)) => {
@@ -104,23 +99,22 @@ pub fn eval(node: Node, env: Rc<RefCell<Env>>) -> Obj {
       if lhs.is_err() {
         return rhs;
       }
-      eval_infix_expr(lhs, infix.operator, rhs)
+      eval_infix_expr(lhs, &infix.operator, rhs)
     }
   }
 }
 
-fn eval_hash_literal(hash_lit: HashLiteral, env: Rc<RefCell<Env>>) -> Obj {
+fn eval_hash_literal(hash_lit: HashLiteral, env: &Rc<RefCell<Env>>) -> Obj {
   let mut pairs = HashMap::new();
   for (key_node, value_node) in hash_lit.pairs {
-    let key = eval(Node::Expr(key_node), Rc::clone(&env));
+    let key = eval(Node::Expr(key_node), Rc::clone(env));
     if key.is_err() {
       return key;
     }
-    let hash_key = match key.hash_key() {
-      Some(hash_key) => hash_key,
-      None => return Obj::err(format!("unusable as hash key: {}", key.type_string())),
+    let Some(hash_key) = key.hash_key() else {
+      return Obj::err(format!("unusable as hash key: {}", key.type_string()));
     };
-    let value = eval(Node::Expr(value_node), Rc::clone(&env));
+    let value = eval(Node::Expr(value_node), Rc::clone(env));
     if value.is_err() {
       return value;
     }
@@ -131,8 +125,8 @@ fn eval_hash_literal(hash_lit: HashLiteral, env: Rc<RefCell<Env>>) -> Obj {
 
 fn eval_index_expr(left: Obj, index: Obj) -> Obj {
   match (left, index) {
-    (Obj::Array(array), Obj::Int(int)) => eval_array_index_expression(array, int),
-    (Obj::Hash(hash), index) => eval_hash_index_expression(hash, index),
+    (Obj::Array(array), Obj::Int(int)) => eval_array_index_expression(&array, &int),
+    (Obj::Hash(hash), index) => eval_hash_index_expression(&hash, &index),
     (left, _) => Obj::err(format!(
       "index operator not supported: {}",
       left.type_string()
@@ -140,21 +134,23 @@ fn eval_index_expr(left: Obj, index: Obj) -> Obj {
   }
 }
 
-fn eval_hash_index_expression(hash: Hash, index: Obj) -> Obj {
-  let hash_key = match index.hash_key() {
-    Some(hash_key) => hash_key,
-    None => return Obj::err(format!("unusable as hash key: {}", index.type_string())),
+fn eval_hash_index_expression(hash: &Hash, index: &Obj) -> Obj {
+  let Some(hash_key) = index.hash_key() else {
+    return Obj::err(format!("unusable as hash key: {}", index.type_string()));
   };
   hash
     .pairs
     .get(&hash_key)
-    .map_or_else(|| Obj::Null, |val| val.clone())
+    .map_or_else(|| Obj::Null, Clone::clone)
 }
 
-fn eval_array_index_expression(array: Array, int: Integer) -> Obj {
-  let index = int.value as usize;
+fn eval_array_index_expression(array: &Array, int: &Integer) -> Obj {
+  if int.value < 0 {
+    return Obj::Null;
+  }
+  let index: usize = int.value.try_into().unwrap();
   let max = array.elements.len() - 1;
-  if index > max || int.value < 0 {
+  if index > max {
     return Obj::Null;
   }
   array.elements[index].clone()
@@ -169,7 +165,7 @@ fn apply_function(obj: Obj, args: Vec<Obj>) -> Obj {
     );
     unrap_return_value(evaluated)
   } else if let Obj::Builtin(builtin) = obj {
-    builtin.call(args)
+    builtin.call(&args)
   } else {
     Obj::err(format!("not a function: {}", obj.type_string()))
   }
@@ -191,48 +187,52 @@ fn extended_function_env(function: &Function, args: Vec<Obj>) -> Env {
   env
 }
 
-fn eval_expressions(exprs: Vec<Expr>, env: Rc<RefCell<Env>>) -> Result<Vec<Obj>, Obj> {
+fn eval_expressions(exprs: Vec<Expr>, env: &Rc<RefCell<Env>>) -> Result<Vec<Obj>, Obj> {
   let mut objects = Vec::new();
   for expr in exprs {
-    let evaluated = eval(Node::Expr(expr), Rc::clone(&env));
+    let evaluated = eval(Node::Expr(expr), Rc::clone(env));
     if evaluated.is_err() {
       return Err(evaluated);
     }
     objects.push(evaluated);
   }
 
-  return Ok(objects);
+  Ok(objects)
 }
 
-fn eval_identifier(ident: Identifier, env: Rc<RefCell<Env>>) -> Obj {
-  match env.borrow().get(&ident.value) {
-    Some(val) => val.clone(),
-    None => BuiltinFn::new_from_ident(&ident).map_or_else(
-      || Obj::err(format!("identifier not found: {}", ident.value)),
-      |b| Obj::Builtin(b),
-    ),
-  }
+fn eval_identifier(ident: &Identifier, env: &Rc<RefCell<Env>>) -> Obj {
+  env.borrow().get(&ident.value).map_or_else(
+    || {
+      BuiltinFn::new_from_ident(ident).map_or_else(
+        || Obj::err(format!("identifier not found: {}", ident.value)),
+        Obj::Builtin,
+      )
+    },
+    |val| val,
+  )
 }
 
-fn eval_infix_expr(lhs: Obj, operator: String, rhs: Obj) -> Obj {
-  match (lhs, operator.as_ref(), rhs) {
-    (Obj::Int(lhs), _, Obj::Int(rhs)) => eval_integer_infix_expression(lhs, operator, rhs),
+fn eval_infix_expr(lhs: Obj, operator: &str, rhs: Obj) -> Obj {
+  match (lhs, operator, rhs) {
+    (Obj::Int(lhs), _, Obj::Int(rhs)) => {
+      eval_integer_infix_expression(&lhs, operator, &rhs)
+    }
     (Obj::Bool(lhs), "==", Obj::Bool(rhs)) => Obj::bool(lhs.value == rhs.value),
     (Obj::Bool(lhs), "!=", Obj::Bool(rhs)) => Obj::bool(lhs.value != rhs.value),
     (Obj::Str(lhs), "+", Obj::Str(rhs)) => Obj::Str(StringObj {
       value: format!("{}{}", lhs.value, rhs.value),
     }),
     (lhs, operator, rhs) => {
-      if lhs.type_string() != rhs.type_string() {
+      if lhs.type_string() == rhs.type_string() {
         Obj::err(format!(
-          "type mismatch: {} {} {}",
+          "unknown operator: {} {} {}",
           lhs.type_string(),
           operator,
           rhs.type_string()
         ))
       } else {
         Obj::err(format!(
-          "unknown operator: {} {} {}",
+          "type mismatch: {} {} {}",
           lhs.type_string(),
           operator,
           rhs.type_string()
@@ -242,8 +242,8 @@ fn eval_infix_expr(lhs: Obj, operator: String, rhs: Obj) -> Obj {
   }
 }
 
-fn eval_integer_infix_expression(lhs: Integer, operator: String, rhs: Integer) -> Obj {
-  match operator.as_ref() {
+fn eval_integer_infix_expression(lhs: &Integer, operator: &str, rhs: &Integer) -> Obj {
+  match operator {
     "+" => Obj::int(lhs.value + rhs.value),
     "-" => Obj::int(lhs.value - rhs.value),
     "*" => Obj::int(lhs.value * rhs.value),
@@ -252,7 +252,7 @@ fn eval_integer_infix_expression(lhs: Integer, operator: String, rhs: Integer) -
     ">" => Obj::bool(lhs.value > rhs.value),
     "==" => Obj::bool(lhs.value == rhs.value),
     "!=" => Obj::bool(lhs.value != rhs.value),
-    op => Obj::err(format!("unknown operator: Obj::Int {} Obj::Int", op)),
+    op => Obj::err(format!("unknown operator: Obj::Int {op} Obj::Int")),
   }
 }
 
@@ -295,10 +295,10 @@ fn eval_if_expression(if_expr: IfExpression, env: Rc<RefCell<Env>>) -> Obj {
   }
 }
 
-fn eval_program(program: Program, env: Rc<RefCell<Env>>) -> Obj {
+fn eval_program(program: Program, env: &Rc<RefCell<Env>>) -> Obj {
   let mut result = Obj::Null;
   for stmt in program {
-    result = eval(Node::Stmt(stmt), Rc::clone(&env));
+    result = eval(Node::Stmt(stmt), Rc::clone(env));
     if let Obj::Return(return_value) = &result {
       return return_value.value.clone();
     } else if let Obj::Err(_) = &result {
@@ -308,10 +308,10 @@ fn eval_program(program: Program, env: Rc<RefCell<Env>>) -> Obj {
   result
 }
 
-fn eval_block_statement(block: BlockStatement, env: Rc<RefCell<Env>>) -> Obj {
+fn eval_block_statement(block: BlockStatement, env: &Rc<RefCell<Env>>) -> Obj {
   let mut result = Obj::Null;
   for stmt in block.statements {
-    result = eval(Node::Stmt(stmt), Rc::clone(&env));
+    result = eval(Node::Stmt(stmt), Rc::clone(env));
     if let Obj::Return(_) | Obj::Err(_) = &result {
       return result;
     }
@@ -335,9 +335,9 @@ mod tests {
       (r#"{"foo": 5}["bar"]"#, Obj::Null),
       (r#"let key = "foo"; {"foo": 5}[key]"#, Obj::int(5)),
       (r#"{}["foo"]"#, Obj::Null),
-      (r#"{5: 5}[5]"#, Obj::int(5)),
-      (r#"{true: 5}[true]"#, Obj::int(5)),
-      (r#"{false: 5}[false]"#, Obj::int(5)),
+      ("{5: 5}[5]", Obj::int(5)),
+      ("{true: 5}[true]", Obj::int(5)),
+      ("{false: 5}[false]", Obj::int(5)),
     ];
     for (input, expected) in tests {
       let evaluated = test_eval(input);
@@ -363,24 +363,9 @@ mod tests {
     }
     "#;
     let expected = vec![
-      (
-        HashKey::Str(StringObj {
-          value: "one".to_string(),
-        }),
-        1,
-      ),
-      (
-        HashKey::Str(StringObj {
-          value: "two".to_string(),
-        }),
-        2,
-      ),
-      (
-        HashKey::Str(StringObj {
-          value: "three".to_string(),
-        }),
-        3,
-      ),
+      (HashKey::Str(StringObj { value: "one".to_string() }), 1),
+      (HashKey::Str(StringObj { value: "two".to_string() }), 2),
+      (HashKey::Str(StringObj { value: "three".to_string() }), 3),
       (HashKey::Int(Integer { value: 4 }), 4),
       (HashKey::Bool(Boolean { value: true }), 5),
       (HashKey::Bool(Boolean { value: false }), 6),
@@ -392,7 +377,7 @@ mod tests {
         assert_integer_object(hash_lit.pairs[&key].clone(), int);
       }
     } else {
-      panic!("object is not a Hash. got={:?}", evaluated);
+      panic!("object is not a Hash. got={evaluated:?}");
     }
   }
 
@@ -406,7 +391,7 @@ mod tests {
       assert_integer_object(array.elements[1].clone(), 4);
       assert_integer_object(array.elements[2].clone(), 6);
     } else {
-      panic!("object is not a Array. got={:?}", evaluated);
+      panic!("object is not a Array. got={evaluated:?}");
     }
   }
 
@@ -444,44 +429,40 @@ mod tests {
       (r#"len("")"#, Obj::int(0)),
       (r#"len("four")"#, Obj::int(4)),
       (r#"len("hello world")"#, Obj::int(11)),
-      (r#"len([1, 2, 3])"#, Obj::int(3)),
-      (r#"len([1, [3, 4]])"#, Obj::int(2)),
-      (r#"len([[]])"#, Obj::int(1)),
-      (r#"len([])"#, Obj::int(0)),
-      (r#"first([1])"#, Obj::int(1)),
-      (r#"first([])"#, Obj::Null),
-      (r#"first([3, 1])"#, Obj::int(3)),
-      (r#"last([1])"#, Obj::int(1)),
-      (r#"last([])"#, Obj::Null),
-      (r#"last([3, 1])"#, Obj::int(1)),
-      (r#"rest([1])"#, Obj::Array(Array { elements: vec![] })),
-      (r#"rest([])"#, Obj::Null),
+      ("len([1, 2, 3])", Obj::int(3)),
+      ("len([1, [3, 4]])", Obj::int(2)),
+      ("len([[]])", Obj::int(1)),
+      ("len([])", Obj::int(0)),
+      ("first([1])", Obj::int(1)),
+      ("first([])", Obj::Null),
+      ("first([3, 1])", Obj::int(3)),
+      ("last([1])", Obj::int(1)),
+      ("last([])", Obj::Null),
+      ("last([3, 1])", Obj::int(1)),
+      ("rest([1])", Obj::Array(Array { elements: vec![] })),
+      ("rest([])", Obj::Null),
       (
-        r#"rest([1, 2, 3])"#,
+        "rest([1, 2, 3])",
         Obj::Array(Array {
           elements: vec![Obj::int(2), Obj::int(3)],
         }),
       ),
       (
-        r#"push([1], 2)"#,
+        "push([1], 2)",
         Obj::Array(Array {
           elements: vec![Obj::int(1), Obj::int(2)],
         }),
       ),
       (
-        r#"push([], 1)"#,
-        Obj::Array(Array {
-          elements: vec![Obj::int(1)],
-        }),
+        "push([], 1)",
+        Obj::Array(Array { elements: vec![Obj::int(1)] }),
       ),
       (
-        r#"let a = [1]; push(a, 2); a;"#,
-        Obj::Array(Array {
-          elements: vec![Obj::int(1)],
-        }),
+        "let a = [1]; push(a, 2); a;",
+        Obj::Array(Array { elements: vec![Obj::int(1)] }),
       ),
       (
-        r#"len(1)"#,
+        "len(1)",
         Obj::err("argument to `len` not supported, got Obj::Int".to_string()),
       ),
       (
@@ -495,7 +476,7 @@ mod tests {
         (evaluated, Obj::Int(int)) => assert_integer_object(evaluated, int.value),
         (evaluated, Obj::Array(array)) => assert!(evaluated == Obj::Array(array)),
         (Obj::Err(eval_err), Obj::Err(err)) => assert_eq!(eval_err.message, err.message),
-        (Obj::Null, Obj::Null) => assert!(true),
+        (Obj::Null, Obj::Null) => {}
         (_, expected) => panic!("unexpected eval result: {}", expected.type_string()),
       }
     }
@@ -508,7 +489,7 @@ mod tests {
     if let Obj::Str(str_lit) = evaluated {
       assert_eq!(str_lit.value, "Hello World!");
     } else {
-      panic!("object is not a String. got={:?}", evaluated);
+      panic!("object is not a String. got={evaluated:?}");
     }
   }
 
@@ -518,25 +499,25 @@ mod tests {
     if let Obj::Str(str_lit) = evaluated {
       assert_eq!(str_lit.value, "Hello World!");
     } else {
-      panic!("object is not a String. got={:?}", evaluated);
+      panic!("object is not a String. got={evaluated:?}");
     }
   }
 
   #[test]
   fn test_closures() {
-    let input = r#"
+    let input = "
     let newAdder = fn(x) {
       fn(y) { x + y };
     }
     let addTwo = newAdder(2);
     addTwo(2);
-    "#;
+    ";
     assert_integer_object(test_eval(input), 4);
   }
 
   #[test]
   fn test_recursion() {
-    let input = r#"
+    let input = "
     let foo = fn(x) {
       if (x > 0) {
         return foo(x - 1);
@@ -544,13 +525,13 @@ mod tests {
       return x;
     }
     foo(1);
-    "#;
+    ";
     assert_integer_object(test_eval(input), 0);
   }
 
   #[test]
   fn test_map() {
-    let input = r#"
+    let input = "
     let map = fn(arr, f) {
       let iter = fn(arr, accumulated) {
         if (len(arr) == 0) {
@@ -565,7 +546,7 @@ mod tests {
     let a = [1, 2, 3, 4];
     let double = fn(x) { x * 2 };
     map(a, double);
-    "#;
+    ";
 
     assert_eq!(
       test_eval(input),
@@ -577,7 +558,7 @@ mod tests {
 
   #[test]
   fn test_reduce() {
-    let input = r#"
+    let input = "
     let reduce = fn(arr, initial, f) {
       let iter = fn(arr, result) {
         if (len(arr) == 0) {
@@ -595,7 +576,7 @@ mod tests {
     };
 
     sum([1, 2, 3, 4, 5]);
-    "#;
+    ";
 
     assert_integer_object(test_eval(input), 15);
   }
@@ -624,7 +605,7 @@ mod tests {
       assert_eq!(function.params[0].string(), "x");
       assert_eq!(function.body.string(), "(x + 2)");
     } else {
-      panic!("object is not a Function. got={:?}", evaluated);
+      panic!("object is not a Function. got={evaluated:?}");
     }
   }
 
@@ -667,7 +648,7 @@ mod tests {
         "unknown operator: Obj::Bool + Obj::Bool",
       ),
       (
-        r#"
+        "
         if (10 > 1) {
           if (10 > 1) {
             return true + false;
@@ -675,7 +656,7 @@ mod tests {
 
           return 1;
         }
-        "#,
+        ",
         "unknown operator: Obj::Bool + Obj::Bool",
       ),
     ];
@@ -684,7 +665,7 @@ mod tests {
       if let Obj::Err(err) = evaluated {
         assert_eq!(err.message, expected);
       } else {
-        panic!("object is not Error. got={:?}", evaluated);
+        panic!("object is not Error. got={evaluated:?}");
       }
     }
   }
@@ -719,11 +700,10 @@ mod tests {
       let evaluated = test_eval(input);
       match (&evaluated, &expected) {
         (_, Obj::Int(int)) => assert_integer_object(evaluated, int.value),
-        (Obj::Null, Obj::Null) => assert!(true),
-        _ => panic!(
-          "unexpected types - evaluated: {:?} expected: {:?}",
-          evaluated, expected
-        ),
+        (Obj::Null, Obj::Null) => {}
+        _ => {
+          panic!("unexpected types - evaluated: {evaluated:?} expected: {expected:?}")
+        }
       }
     }
   }
@@ -802,7 +782,7 @@ mod tests {
     if let Obj::Bool(boolean) = obj {
       assert_eq!(boolean.value, expected);
     } else {
-      panic!("object is not Boolean. got={:?}", obj);
+      panic!("object is not Boolean. got={obj:?}");
     }
   }
 
@@ -810,12 +790,12 @@ mod tests {
     if let Obj::Int(int) = obj {
       assert_eq!(int.value, expected);
     } else {
-      panic!("object is not Integer. got={:?}", obj);
+      panic!("object is not Integer. got={obj:?}");
     }
   }
 
   fn test_eval(input: &str) -> Obj {
-    let lexer = Lexer::from(input);
+    let lexer = Lexer::new(input);
     let mut parser = Parser::new(lexer);
     let program = parser.parse_program();
     let env = Env::new();

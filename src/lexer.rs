@@ -19,15 +19,15 @@ pub struct Lexer {
 }
 
 impl Lexer {
-  pub fn new(input: String) -> Lexer {
-    let mut lexer = Lexer {
+  pub fn new(input: &str) -> Self {
+    let mut lexer = Self {
       input: input.chars().collect(),
       position: 0,
       read_position: 0,
       ch: '\0',
     };
     lexer.read_char();
-    return lexer;
+    lexer
   }
 
   fn read_char(&mut self) {
@@ -42,22 +42,22 @@ impl Lexer {
 
   fn peek_char(&self) -> char {
     if self.read_position >= self.input.len() {
-      return '\0';
+      '\0'
     } else {
-      return self.input[self.read_position];
+      self.input[self.read_position]
     }
   }
 
   fn read_identifier(&mut self) -> Token {
     let initial = self.position;
-    while is_letter(&self.ch) {
+    while is_letter(self.ch) {
       self.read_char();
     }
     let ident: String = self.input[initial..self.position].iter().collect();
-    return match KEYWORDS.get(&ident).cloned() {
-      Some(keyword) => keyword,
-      None => Token::Ident(ident),
-    };
+    KEYWORDS
+      .get(&ident)
+      .cloned()
+      .map_or(Token::Ident(ident), |keyword| keyword)
   }
 
   fn read_number(&mut self) -> Token {
@@ -79,10 +79,10 @@ impl Lexer {
     self.next().unwrap()
   }
 
-  #[cfg(test)]
-  pub fn from(input: &str) -> Lexer {
-    Lexer::new(String::from(input))
-  }
+  // #[cfg(test)]
+  // pub fn from(input: &str) -> Self {
+  //   Self::new(input)
+  // }
 
   fn read_string(&mut self) -> String {
     let start_pos = self.position + 1;
@@ -133,23 +133,23 @@ impl Iterator for Lexer {
           token = Token::Assign;
         }
       }
-      '\0' => token = Token::EOF,
+      '\0' => token = Token::Eof,
       _ => {
-        if is_letter(&self.ch) {
+        if is_letter(self.ch) {
           return Some(self.read_identifier());
         } else if self.ch.is_ascii_digit() {
           return Some(self.read_number());
         }
-        token = Token::Illegal
+        token = Token::Illegal;
       }
     };
     self.read_char();
-    return Some(token);
+    Some(token)
   }
 }
 
-fn is_letter(ch: &char) -> bool {
-  ch.is_ascii_alphabetic() || *ch == '_'
+const fn is_letter(ch: char) -> bool {
+  ch.is_ascii_alphabetic() || ch == '_'
 }
 
 // tests
@@ -161,8 +161,8 @@ mod tests {
 
   #[test]
   fn token_variant() {
-    assert!(Token::EOF.same_variant(&Token::EOF));
-    assert!(!Token::EOF.same_variant(&Token::Comma));
+    assert!(Token::Eof.same_variant(&Token::Eof));
+    assert!(!Token::Eof.same_variant(&Token::Comma));
     assert!(Token::Int("33".to_string()).same_variant(&Token::Int("44".to_string())));
     assert!(!Token::Int("33".to_string()).same_variant(&Token::Ident("33".to_string())));
   }
@@ -281,10 +281,10 @@ mod tests {
       Token::Colon,
       Token::String("bar".to_string()),
       Token::RBrace,
-      Token::EOF,
+      Token::Eof,
     ];
 
-    let lexer = Lexer::from(input);
+    let lexer = Lexer::new(input);
 
     for (token, expected) in lexer.zip(cases.iter()) {
       assert_eq!(token, *expected);

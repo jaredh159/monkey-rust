@@ -82,7 +82,7 @@ impl Node for ArrayLiteral {
       self
         .elements
         .iter()
-        .map(|e| e.string())
+        .map(Node::string)
         .collect::<Vec<_>>()
         .join(", ")
     )
@@ -137,7 +137,7 @@ impl Node for CallExpression {
       self
         .arguments
         .iter()
-        .map(|a| a.string())
+        .map(Node::string)
         .collect::<Vec<_>>()
         .join(", ")
     )
@@ -244,7 +244,7 @@ impl Node for FunctionLiteral {
       self
         .parameters
         .iter()
-        .map(|p| p.string())
+        .map(Node::string)
         .collect::<Vec<_>>()
         .join(", "),
       self.body.string()
@@ -285,15 +285,15 @@ where
 {
   fn token_literal(&self) -> String {
     match self {
-      Either::Left(node) => node.token_literal(),
-      Either::Right(node) => node.token_literal(),
+      Self::Left(node) => node.token_literal(),
+      Self::Right(node) => node.token_literal(),
     }
   }
 
   fn string(&self) -> String {
     match self {
-      Either::Left(node) => node.string(),
-      Either::Right(node) => node.string(),
+      Self::Left(node) => node.string(),
+      Self::Right(node) => node.string(),
     }
   }
 }
@@ -301,35 +301,35 @@ where
 impl Node for Expr {
   fn token_literal(&self) -> String {
     match self {
-      Expr::Ident(ident) => ident.token.literal(),
-      Expr::Hash(hash_lit) => hash_lit.token.literal(),
-      Expr::Int(int) => int.token_literal(),
-      Expr::Prefix(prefix) => prefix.token_literal(),
-      Expr::Infix(infix) => infix.token_literal(),
-      Expr::Bool(bool_lit) => bool_lit.token_literal(),
-      Expr::If(if_expr) => if_expr.token.literal(),
-      Expr::Func(fn_literal) => fn_literal.token_literal(),
-      Expr::Call(call_expr) => call_expr.token_literal(),
-      Expr::String(string) => string.token_literal(),
-      Expr::Array(array) => array.token_literal(),
-      Expr::Index(index) => index.token_literal(),
+      Self::Ident(ident) => ident.token.literal(),
+      Self::Hash(hash_lit) => hash_lit.token.literal(),
+      Self::Int(int) => int.token_literal(),
+      Self::Prefix(prefix) => prefix.token_literal(),
+      Self::Infix(infix) => infix.token_literal(),
+      Self::Bool(bool_lit) => bool_lit.token_literal(),
+      Self::If(if_expr) => if_expr.token.literal(),
+      Self::Func(fn_literal) => fn_literal.token_literal(),
+      Self::Call(call_expr) => call_expr.token_literal(),
+      Self::String(string) => string.token_literal(),
+      Self::Array(array) => array.token_literal(),
+      Self::Index(index) => index.token_literal(),
     }
   }
 
   fn string(&self) -> String {
     match self {
-      Expr::Ident(ident) => ident.string(),
-      Expr::Hash(hash_lit) => hash_lit.string(),
-      Expr::Int(int) => int.string(),
-      Expr::Bool(bool_lit) => bool_lit.string(),
-      Expr::Prefix(prefix) => prefix.string(),
-      Expr::Infix(infix) => infix.string(),
-      Expr::Func(fn_literal) => fn_literal.string(),
-      Expr::Call(call_expr) => call_expr.string(),
-      Expr::If(if_expr) => if_expr.string(),
-      Expr::String(string) => string.string(),
-      Expr::Array(array) => array.string(),
-      Expr::Index(index) => index.string(),
+      Self::Ident(ident) => ident.string(),
+      Self::Hash(hash_lit) => hash_lit.string(),
+      Self::Int(int) => int.string(),
+      Self::Bool(bool_lit) => bool_lit.string(),
+      Self::Prefix(prefix) => prefix.string(),
+      Self::Infix(infix) => infix.string(),
+      Self::Func(fn_literal) => fn_literal.string(),
+      Self::Call(call_expr) => call_expr.string(),
+      Self::If(if_expr) => if_expr.string(),
+      Self::String(string) => string.string(),
+      Self::Array(array) => array.string(),
+      Self::Index(index) => index.string(),
     }
   }
 }
